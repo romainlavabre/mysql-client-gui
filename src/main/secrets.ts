@@ -77,18 +77,29 @@ export class SecretStore {
   }
 
   getSecrets(repoId: string, connectionId: string): ConnectionSecrets {
+    return this.readSecrets(repoId, connectionId).secrets
+  }
+
+  /**
+   * Secrets of a connection. `unreadable` means they are stored but cannot be
+   * decrypted, typically because the OS keyring key changed: the encrypted
+   * value is kept (it becomes readable again if the key comes back).
+   */
+  readSecrets(repoId: string, connectionId: string): { secrets: ConnectionSecrets; unreadable: boolean } {
     const encrypted = this.store.read().secrets[SecretStore.key(repoId, connectionId)]
-    if (!encrypted) return {}
+    if (!encrypted) return { secrets: {}, unreadable: false }
     try {
-      return JSON.parse(this.cipher.decrypt(encrypted)) as ConnectionSecrets
-    } catch {
-      // Keyring changed or file tampered with: the user will have to type the secrets again.
-      return {}
+      return { secrets: JSON.parse(this.cipher.decrypt(encrypted)) as ConnectionSecrets, unreadable: false }
+    } catch (error) {
+      console.warn(`Cannot decrypt the secrets of connection ${connectionId}: ${(error as Error).message}`)
+      return { secrets: {}, unreadable: true }
     }
   }
 
+  /** Stores secrets. Empty secrets never overwrite stored ones that cannot be decrypted. */
   setSecrets(repoId: string, connectionId: string, secrets: ConnectionSecrets): void {
     const cleaned = Object.fromEntries(Object.entries(secrets).filter(([, value]) => value)) as ConnectionSecrets
+    if (Object.keys(cleaned).length === 0 && this.readSecrets(repoId, connectionId).unreadable) return
     this.store.update((file) => {
       const key = SecretStore.key(repoId, connectionId)
       if (Object.keys(cleaned).length === 0) delete file.secrets[key]

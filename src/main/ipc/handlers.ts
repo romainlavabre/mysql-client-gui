@@ -22,6 +22,7 @@ export interface HandlerContext {
   jobs: io.JobRunner
   window: () => BrowserWindow | null
   secretsEncrypted: () => boolean
+  secretsBackend: () => string
 }
 
 export function createHandlers(ctx: HandlerContext): Api {
@@ -223,7 +224,12 @@ export function createHandlers(ctx: HandlerContext): Api {
     },
 
     app: {
-      info: async () => ({ version: app.getVersion(), platform: process.platform, secretsEncrypted: ctx.secretsEncrypted() })
+      info: async () => ({
+        version: app.getVersion(),
+        platform: process.platform,
+        secretsEncrypted: ctx.secretsEncrypted(),
+        secretsBackend: ctx.secretsBackend()
+      })
     }
   }
 }

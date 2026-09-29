@@ -47,7 +47,8 @@ const connectionDraft = z.object({
     sshPassword: z.string().max(10_000).optional(),
     sshPassphrase: z.string().max(10_000).optional()
   }),
-  override: z.object({ user: z.string().max(200).optional() })
+  override: z.object({ user: z.string().max(200).optional() }),
+  secretsUnreadable: z.boolean().optional()
 })
 
 const savedQuery = z.object({

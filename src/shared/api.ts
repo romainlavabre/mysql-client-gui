@@ -140,7 +140,7 @@ export interface Api {
     openDirectory(args: { title: string }): Promise<string | null>
   }
   app: {
-    info(): Promise<{ version: string; platform: string; secretsEncrypted: boolean }>
+    info(): Promise<{ version: string; platform: string; secretsEncrypted: boolean; secretsBackend: string }>
   }
 }
 

@@ -256,6 +256,13 @@ export function ConnectionForm({ connectionId }: { connectionId: string | 'new' 
           </div>
         </Section>
 
+        {draft.secretsUnreadable && (
+          <div className="rounded-md border border-warning/40 bg-warning/10 px-3 py-2 text-xs text-warning">
+            The saved passwords of this connection can no longer be decrypted: the system keyring key changed. They are kept (they
+            work again if the key comes back); type them again to replace them.
+          </div>
+        )}
+
         <Section title="Server">
           <Field label="Host" className="col-span-4">
             <Input value={config.host} onChange={(e) => setConfig({ host: e.target.value })} />

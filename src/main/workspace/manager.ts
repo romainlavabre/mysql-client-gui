@@ -275,9 +275,11 @@ export class WorkspaceManager {
 
   draft(connectionId: string): ConnectionDraft {
     const repo = this.active()
+    const { secrets, unreadable } = this.secrets.readSecrets(repo.id, connectionId)
     return {
       config: this.connection(connectionId),
-      secrets: this.secrets.getSecrets(repo.id, connectionId),
+      secrets,
+      secretsUnreadable: unreadable,
       override: this.secrets.getOverride(repo.id, connectionId)
     }
   }

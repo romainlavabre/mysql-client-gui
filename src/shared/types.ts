@@ -88,6 +88,8 @@ export interface ConnectionDraft {
   config: ConnectionConfig
   secrets: ConnectionSecrets
   override: ConnectionOverride
+  /** Secrets are stored but could not be decrypted (the OS keyring key changed). */
+  secretsUnreadable?: boolean
 }
 
 // ------------------------------------------------------------- saved queries

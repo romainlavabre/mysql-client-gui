@@ -54,6 +54,7 @@ export function SettingsDialog({ open, onOpenChange }: { open: boolean; onOpenCh
                 <span className="text-warning">no system keyring found, encrypted with a local key file only</span>
               )}
             </div>
+            <div>Keyring backend: {info.secretsBackend}</div>
           </div>
         )}
       </div>

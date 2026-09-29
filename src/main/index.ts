@@ -108,7 +108,8 @@ void app.whenReady().then(() => {
       history,
       jobs,
       window: () => mainWindow,
-      secretsEncrypted
+      secretsEncrypted,
+      secretsBackend: () => (process.platform === 'linux' ? safeStorage.getSelectedStorageBackend() : 'os')
     })
   )
   createWindow()

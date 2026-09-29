@@ -58,3 +58,31 @@ describe('SecretStore', () => {
     expect(store.getOverride('repo', 'c1')).toEqual({})
   })
 })
+
+describe('undecryptable secrets', () => {
+  it('reports them and never wipes them with an empty save', () => {
+    let keyringKey = 'k1'
+    const rotating: OsEncryption = {
+      isEncryptionAvailable: () => true,
+      encryptString: (plain) => Buffer.from(`${keyringKey}|${plain}`),
+      decryptString: (encrypted) => {
+        const [key, plain] = encrypted.toString().split('|')
+        if (key !== keyringKey) throw new Error('Error while decrypting the ciphertext provided to safeStorage.decryptString.')
+        return plain
+      }
+    }
+    const store = new SecretStore(join(dir, 'secrets.json'), createCipher(rotating, join(dir, 'key')))
+    store.setSecrets('repo', 'c1', { password: 'p@ss' })
+
+    keyringKey = 'k2' // The keyring key changed.
+    expect(store.readSecrets('repo', 'c1')).toEqual({ secrets: {}, unreadable: true })
+    store.setSecrets('repo', 'c1', {}) // Saving the form without retyping.
+
+    keyringKey = 'k1' // The key comes back: nothing was lost.
+    expect(store.readSecrets('repo', 'c1')).toEqual({ secrets: { password: 'p@ss' }, unreadable: false })
+
+    keyringKey = 'k2'
+    store.setSecrets('repo', 'c1', { password: 'new' }) // Retyped: replaced.
+    expect(store.readSecrets('repo', 'c1')).toEqual({ secrets: { password: 'new' }, unreadable: false })
+  })
+})
