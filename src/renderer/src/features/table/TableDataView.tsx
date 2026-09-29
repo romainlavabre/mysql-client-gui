@@ -398,7 +398,7 @@ export function TableDataView({ tab, details }: { tab: TableTab; details: TableD
           <ChevronRight className="size-4" />
         </IconButton>
         <Select
-          className="h-6 w-24 text-[11px]"
+          className="h-6 w-28 text-[11px]"
           value={pageSize}
           onChange={(e) => void guardPending(() => {
             setPageSize(Number(e.target.value))

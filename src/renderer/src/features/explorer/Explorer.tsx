@@ -31,7 +31,7 @@ import { formatNumber } from '../../lib/format'
 import { invalidateSchema, runStatements } from '../../lib/actions'
 import { prompt } from '../../components/feedback'
 import { IconButton, Input, Spinner } from '../../components/ui'
-import { openQueryTab, openTab, useApp } from '../../store'
+import { activateGroup, openQueryTab, openTab, useApp } from '../../store'
 import { openIo } from '../io/ioStore'
 import { CreateDatabaseDialog } from './CreateDatabaseDialog'
 
@@ -142,6 +142,8 @@ export function Explorer() {
             onToggle={() => {
               toggle(db.name)
               useApp.setState({ currentDatabase: db.name })
+              // Show the tabs of this database when it has some.
+              activateGroup(db.name)
             }}
             expandedGroups={expanded}
             toggleGroup={toggle}

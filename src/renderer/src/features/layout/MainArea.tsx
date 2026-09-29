@@ -1,9 +1,24 @@
 // Main area: connection editor when disconnected, tabs when connected.
 import clsx from 'clsx'
 import { Activity, Code2, Database, FileCode, Plus, Table2, Wrench, X, Eye } from 'lucide-react'
-import { useEffect, type ReactNode } from 'react'
+import { useEffect, useMemo, type ReactNode } from 'react'
 import { EmptyState, Button } from '../../components/ui'
-import { closeTab, isDirty, openQueryTab, useApp, type Tab } from '../../store'
+import {
+  NO_DATABASE_GROUP,
+  SERVER_GROUP,
+  activateGroup,
+  closeTab,
+  groupLabel,
+  groupTabs,
+  isDirty,
+  openQueryTab,
+  tabGroup,
+  useApp,
+  type QueryTab,
+  type Tab,
+  type TabGroupInfo
+} from '../../store'
+import { ENV_COLORS } from '../connections/env'
 import { ConnectionForm } from '../connections/ConnectionForm'
 import { useConnectionEditor } from '../connections/ConnectionList'
 import { QueryTabView } from '../editor/QueryTabView'
@@ -62,8 +77,71 @@ async function requestClose(tab: Tab): Promise<void> {
   closeTab(tab.id)
 }
 
-function TabBar() {
-  const tabs = useApp((s) => s.tabs)
+/** Closes every tab of a group, with one confirmation for the unsaved queries. */
+async function requestCloseGroup(group: TabGroupInfo): Promise<void> {
+  const dirty = group.tabs.filter((t): t is QueryTab => t.kind === 'query' && isDirty(t))
+  if (dirty.length > 0) {
+    const ok = await confirm({
+      title: 'Unsaved changes',
+      body: `${dirty.map((t) => `"${t.title}"`).join(', ')} ${dirty.length > 1 ? 'have' : 'has'} changes not saved to the workspace. Close anyway?`,
+      confirmLabel: 'Close all',
+      danger: true
+    })
+    if (!ok) return
+  }
+  for (const tab of group.tabs) closeTab(tab.id)
+}
+
+function isRealDatabase(group: string): boolean {
+  return group !== SERVER_GROUP && group !== NO_DATABASE_GROUP
+}
+
+function groupIcon(group: string): ReactNode {
+  if (group === SERVER_GROUP) return <Activity className="size-3.5 shrink-0 text-rose-400" />
+  if (group === NO_DATABASE_GROUP) return <FileCode className="size-3.5 shrink-0 text-muted" />
+  return <Database className="size-3.5 shrink-0 text-emerald-400" />
+}
+
+function GroupBar({ groups, activeGroup }: { groups: TabGroupInfo[]; activeGroup: string | null }) {
+  const session = useApp((s) => s.session)
+  const color = session ? session.connection.color || ENV_COLORS[session.connection.env] : undefined
+  return (
+    <div className="flex h-8 shrink-0 items-stretch overflow-x-auto border-b border-border bg-panel-2">
+      {groups.map((group) => {
+        const active = group.key === activeGroup
+        return (
+          <div
+            key={group.key}
+            className={clsx(
+              'group relative flex max-w-64 shrink-0 cursor-pointer items-center gap-1.5 border-r border-border pl-3 pr-1.5 text-xs',
+              active ? 'bg-panel font-medium text-fg' : 'text-muted hover:bg-hover hover:text-fg'
+            )}
+            onClick={() => activateGroup(group.key)}
+            onAuxClick={(e) => e.button === 1 && void requestCloseGroup(group)}
+            title={isRealDatabase(group.key) ? `Database ${group.key}` : groupLabel(group.key)}
+          >
+            {active && <span className="absolute inset-x-0 bottom-0 h-0.5" style={{ background: color }} />}
+            {groupIcon(group.key)}
+            <span className="truncate">{groupLabel(group.key)}</span>
+            <span className="rounded bg-bg px-1 text-[10px] text-muted">{group.tabs.length}</span>
+            <button
+              className="flex size-5 items-center justify-center rounded opacity-0 hover:bg-hover group-hover:opacity-100"
+              onClick={(e) => {
+                e.stopPropagation()
+                void requestCloseGroup(group)
+              }}
+              aria-label={`Close the tabs of ${groupLabel(group.key)}`}
+            >
+              <X className="size-3.5" />
+            </button>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+function TabBar({ tabs, activeGroup }: { tabs: Tab[]; activeGroup: string | null }) {
   const activeTabId = useApp((s) => s.activeTabId)
   return (
     <div className="flex h-9 shrink-0 items-stretch border-b border-border bg-panel">
@@ -109,11 +187,23 @@ function TabBar() {
           </div>
         ))}
       </div>
-      <button className="flex w-9 shrink-0 items-center justify-center text-muted hover:bg-hover hover:text-fg" onClick={() => openQueryTab()} aria-label="New query">
+      <button
+        className="flex w-9 shrink-0 items-center justify-center text-muted hover:bg-hover hover:text-fg"
+        onClick={() => newQueryInGroup(activeGroup)}
+        aria-label="New query"
+        title={activeGroup && isRealDatabase(activeGroup) ? `New query on ${activeGroup}` : 'New query'}
+      >
         <Plus className="size-4" />
       </button>
     </div>
   )
+}
+
+/** New query tab on the database of the active group. */
+function newQueryInGroup(group: string | null): void {
+  if (group && isRealDatabase(group)) openQueryTab({ database: group })
+  else if (group === NO_DATABASE_GROUP) openQueryTab({ database: null })
+  else openQueryTab()
 }
 
 function TabContent({ tab }: { tab: Tab }) {
@@ -138,18 +228,28 @@ function useTabShortcuts(): void {
     const onKey = (e: KeyboardEvent): void => {
       const { session, tabs, activeTabId } = useApp.getState()
       if (!session || !(e.ctrlKey || e.metaKey)) return
+      const active = tabs.find((t) => t.id === activeTabId)
+      const activeGroup = active ? tabGroup(active) : null
       if (e.key === 't') {
         e.preventDefault()
-        openQueryTab()
+        newQueryInGroup(activeGroup)
       } else if (e.key === 'w') {
         e.preventDefault()
-        const tab = tabs.find((t) => t.id === activeTabId)
-        if (tab) void requestClose(tab)
-      } else if (e.key === 'Tab' && tabs.length > 1) {
+        if (active) void requestClose(active)
+      } else if (e.key === 'Tab' && e.altKey) {
+        // Ctrl+Alt+Tab: next database group.
         e.preventDefault()
-        const index = tabs.findIndex((t) => t.id === activeTabId)
-        const next = (index + (e.shiftKey ? -1 : 1) + tabs.length) % tabs.length
-        useApp.setState({ activeTabId: tabs[next].id })
+        const groups = groupTabs(tabs)
+        if (groups.length < 2) return
+        const index = groups.findIndex((g) => g.key === activeGroup)
+        activateGroup(groups[(index + (e.shiftKey ? -1 : 1) + groups.length) % groups.length].key)
+      } else if (e.key === 'Tab') {
+        // Ctrl+Tab: next tab of the active group.
+        e.preventDefault()
+        const members = tabs.filter((t) => tabGroup(t) === activeGroup)
+        if (members.length < 2) return
+        const index = members.findIndex((t) => t.id === activeTabId)
+        useApp.setState({ activeTabId: members[(index + (e.shiftKey ? -1 : 1) + members.length) % members.length].id })
       }
     }
     window.addEventListener('keydown', onKey)
@@ -162,6 +262,9 @@ export function MainArea() {
   const tabs = useApp((s) => s.tabs)
   const activeTabId = useApp((s) => s.activeTabId)
   const editing = useConnectionEditor((s) => s.editing)
+  const groups = useMemo(() => groupTabs(tabs), [tabs])
+  const activeTab = tabs.find((t) => t.id === activeTabId)
+  const activeGroup = activeTab ? tabGroup(activeTab) : null
   useTabShortcuts()
 
   if (!session) {
@@ -178,7 +281,8 @@ export function MainArea() {
 
   return (
     <div className="flex h-full flex-col bg-bg">
-      <TabBar />
+      {groups.length > 0 && <GroupBar groups={groups} activeGroup={activeGroup} />}
+      {groups.length > 0 && <TabBar tabs={groups.find((g) => g.key === activeGroup)?.tabs ?? []} activeGroup={activeGroup} />}
       <div className="relative min-h-0 flex-1">
         {tabs.length === 0 && (
           <EmptyState icon={<FileCode className="size-10" />} title="No open tab">

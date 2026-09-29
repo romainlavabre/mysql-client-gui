@@ -259,7 +259,13 @@ export function closeTab(id: string): void {
   if (index < 0) return
   const closing = tabs[index]
   const remaining = tabs.filter((t) => t.id !== id)
-  const nextActive = activeTabId === id ? (remaining[index] ?? remaining[index - 1] ?? null)?.id ?? null : activeTabId
+  let nextActive = activeTabId
+  if (activeTabId === id) {
+    // Stay in the same database group when it still has tabs.
+    const sameGroup = remaining.filter((t) => tabGroup(t) === tabGroup(closing))
+    const neighbour = sameGroup.find((t) => tabs.indexOf(t) > index) ?? sameGroup.at(-1)
+    nextActive = (neighbour ?? remaining[index] ?? remaining[index - 1] ?? null)?.id ?? null
+  }
   useApp.setState({ tabs: remaining, activeTabId: nextActive })
   if (closing.kind === 'query' && session) {
     void api.sessions.closeTab({ sessionId: session.info.sessionId, tabId: id }).catch(() => undefined)
@@ -268,4 +274,68 @@ export function closeTab(id: string): void {
 
 export function isDirty(tab: QueryTab): boolean {
   return tab.savedPath ? tab.sql !== tab.savedSql : false
+}
+
+// ---------------------------------------------------------------- tab groups
+// Tabs are grouped by database in the tab bar. A query tab belongs to the
+// database selected in its editor, so it follows a USE or a selector change.
+
+export const SERVER_GROUP = '\u0000server'
+export const NO_DATABASE_GROUP = '\u0000none'
+
+export function tabGroup(tab: Tab): string {
+  switch (tab.kind) {
+    case 'admin':
+      return SERVER_GROUP
+    case 'query':
+      return tab.database ?? NO_DATABASE_GROUP
+    default:
+      return tab.database
+  }
+}
+
+export function groupLabel(group: string): string {
+  if (group === SERVER_GROUP) return 'Server'
+  if (group === NO_DATABASE_GROUP) return 'No database'
+  return group
+}
+
+export interface TabGroupInfo {
+  key: string
+  tabs: Tab[]
+}
+
+/** Groups in order of their first tab; server and no-database groups last. */
+export function groupTabs(tabs: Tab[]): TabGroupInfo[] {
+  const groups = new Map<string, Tab[]>()
+  for (const tab of tabs) {
+    const key = tabGroup(tab)
+    groups.set(key, [...(groups.get(key) ?? []), tab])
+  }
+  const special = (key: string): number => (key === NO_DATABASE_GROUP ? 1 : key === SERVER_GROUP ? 2 : 0)
+  return [...groups.entries()].map(([key, groupTabs]) => ({ key, tabs: groupTabs })).sort((a, b) => special(a.key) - special(b.key))
+}
+
+/** Last active tab of each group, to come back to it when the group is selected again. */
+const lastActiveByGroup = new Map<string, string>()
+
+useApp.subscribe((state, previous) => {
+  if (state.activeTabId === previous.activeTabId) return
+  const tab = state.tabs.find((t) => t.id === state.activeTabId)
+  if (!tab) return
+  lastActiveByGroup.set(tabGroup(tab), tab.id)
+  const group = tabGroup(tab)
+  if (group !== SERVER_GROUP && group !== NO_DATABASE_GROUP && state.currentDatabase !== group) {
+    useApp.setState({ currentDatabase: group })
+  }
+})
+
+/** Selects a group: its last active tab, else its first one. Returns false when the group has no tab. */
+export function activateGroup(group: string): boolean {
+  const { tabs } = useApp.getState()
+  const members = tabs.filter((t) => tabGroup(t) === group)
+  if (members.length === 0) return false
+  const remembered = members.find((t) => t.id === lastActiveByGroup.get(group))
+  useApp.setState({ activeTabId: (remembered ?? members[0]).id })
+  return true
 }

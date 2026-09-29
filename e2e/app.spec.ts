@@ -77,4 +77,16 @@ test('creates a workspace and a connection, runs a query and edits a row', async
   await expect(page.getByText('1 pending')).toBeVisible()
   await page.getByRole('button', { name: 'Apply', exact: true }).click()
   await expect(page.getByText(/1 change\(s\) applied/)).toBeVisible()
+
+  // Tabs are grouped by database: the table in e2e_db, the query without database.
+  const group = (name: string) => page.getByTitle(name === 'No database' ? name : `Database ${name}`, { exact: true })
+  await expect(group('e2e_db')).toBeVisible()
+  await expect(group('No database')).toBeVisible()
+  await page.screenshot({ path: 'test-results/tab-groups.png' })
+
+  // A query follows the database selected in its editor.
+  await group('No database').click()
+  await page.locator('select').filter({ hasText: 'No database' }).selectOption('e2e_db')
+  await expect(group('No database')).toHaveCount(0)
+  await expect(group('e2e_db')).toContainText('2')
 })
