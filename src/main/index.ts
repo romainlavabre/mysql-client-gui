@@ -14,6 +14,15 @@ import { schemas } from './ipc/schemas'
 app.setName('mysql-client-gui')
 if (process.env.MYSQL_CLIENT_GUI_DATA_DIR) app.setPath('userData', process.env.MYSQL_CLIENT_GUI_DATA_DIR)
 
+// Launched from a snap's terminal (JetBrains IDEs, VS Code…), SNAP_NAME is
+// inherited: libsecret then believes it runs confined and stores the keyring
+// key through the secret portal, where it cannot find it again at the next
+// launch, so every saved password becomes unreadable. Drop it unless the app
+// really is that snap.
+if (process.env.SNAP_NAME && !(process.env.SNAP && process.execPath.startsWith(process.env.SNAP + '/'))) {
+  delete process.env.SNAP_NAME
+}
+
 let mainWindow: BrowserWindow | null = null
 
 function send<E extends keyof ApiEvents>(event: E, payload: ApiEvents[E]): void {
