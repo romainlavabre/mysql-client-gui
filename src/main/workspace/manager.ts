@@ -256,9 +256,19 @@ export class WorkspaceManager {
     await Promise.all([...this.queues.values()].map((p) => p.catch(() => undefined)))
   }
 
-  private async commitChange(repo: WorkspaceRepo, paths: string[], message: string): Promise<void> {
-    await this.enqueue(repo.id, () => gitOps.commit(repo.path, paths, message))
+  /**
+   * Writes files and commits them as one step of the repo queue: a sync
+   * queued in between would otherwise commit them under a generic message,
+   * or pull while the files are half written.
+   */
+  private async change<T>(repo: WorkspaceRepo, apply: () => { result: T; paths: string[]; message: string }): Promise<T> {
+    const result = await this.enqueue(repo.id, async () => {
+      const { result, paths, message } = apply()
+      await gitOps.commit(repo.path, paths, message)
+      return result
+    })
     this.schedulePush(repo.id)
+    return result
   }
 
   // ----------------------------------------------------------- connections
@@ -292,20 +302,27 @@ export class WorkspaceManager {
 
   async saveConnection(draft: ConnectionDraft): Promise<ConnectionConfig> {
     const repo = this.active()
-    const isNew = !draft.config.id || !this.listConnections().some((c) => c.id === draft.config.id)
-    const config = { ...draft.config, id: draft.config.id || randomUUID() }
-    const { config: saved, paths } = layout.writeConnection(repo.path, config)
+    const saved = await this.change(repo, () => {
+      const isNew = !draft.config.id || !this.listConnections().some((c) => c.id === draft.config.id)
+      const config = { ...draft.config, id: draft.config.id || randomUUID() }
+      const { config: written, paths, renamedFrom } = layout.writeConnection(repo.path, config)
+      // Queries bound to the old file name follow the rename.
+      if (renamedFrom) paths.push(...layout.rebindQueries(repo.path, renamedFrom, written.slug))
+      const verb = isNew ? 'Add' : renamedFrom ? 'Rename' : 'Update'
+      return { result: written, paths, message: `${verb} connection "${written.name}"` }
+    })
     this.secrets.setSecrets(repo.id, saved.id, draft.secrets)
     this.secrets.setOverride(repo.id, saved.id, draft.override)
-    await this.commitChange(repo, paths, `${isNew ? 'Add' : 'Update'} connection "${saved.name}"`)
     return saved
   }
 
   async removeConnection(connectionId: string): Promise<void> {
     const repo = this.active()
-    const { config, paths } = layout.deleteConnection(repo.path, connectionId)
+    await this.change(repo, () => {
+      const { config, paths } = layout.deleteConnection(repo.path, connectionId)
+      return { result: undefined, paths, message: `Remove connection "${config.name}"` }
+    })
     this.secrets.forget(repo.id, connectionId)
-    await this.commitChange(repo, paths, `Remove connection "${config.name}"`)
   }
 
   async duplicateConnection(connectionId: string): Promise<ConnectionConfig> {
@@ -324,17 +341,17 @@ export class WorkspaceManager {
 
   async saveQuery(query: SavedQuery, previousPath?: string): Promise<SavedQuery> {
     const repo = this.active()
-    const existed = existsSync(layout.queryFile(repo.path, previousPath ?? query.path))
-    const { query: saved, paths } = layout.writeQuery(repo.path, query, previousPath)
-    const verb = !existed ? 'Add' : previousPath && previousPath !== query.path ? 'Move' : 'Update'
-    await this.commitChange(repo, paths, `${verb} query "${saved.name}"`)
-    return saved
+    return this.change(repo, () => {
+      const existed = existsSync(layout.queryFile(repo.path, previousPath ?? query.path))
+      const { query: saved, paths } = layout.writeQuery(repo.path, query, previousPath)
+      const verb = !existed ? 'Add' : previousPath && previousPath !== query.path ? 'Move' : 'Update'
+      return { result: saved, paths, message: `${verb} query "${saved.name}"` }
+    })
   }
 
   async removeQuery(path: string): Promise<void> {
     const repo = this.active()
-    const paths = layout.deleteQuery(repo.path, path)
-    await this.commitChange(repo, paths, `Remove query "${path}"`)
+    await this.change(repo, () => ({ result: undefined, paths: layout.deleteQuery(repo.path, path), message: `Remove query "${path}"` }))
   }
 }
 

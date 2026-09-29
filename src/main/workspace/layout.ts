@@ -92,18 +92,26 @@ export function listConnections(dir: string): ConnectionConfig[] {
   return connections.sort((a, b) => a.name.localeCompare(b.name))
 }
 
-function uniqueSlug(dir: string, name: string): string {
+/** Free slug for a name; `own` is the connection's current slug, which it may keep. */
+function uniqueSlug(dir: string, name: string, own?: string): string {
   const base = slugify(name)
   let slug = base
-  for (let n = 2; existsSync(join(dir, CONNECTIONS_DIR, `${slug}.json`)); n++) slug = `${base}-${n}`
+  for (let n = 2; slug !== own && existsSync(join(dir, CONNECTIONS_DIR, `${slug}.json`)); n++) slug = `${base}-${n}`
   return slug
 }
 
-/** Writes a connection; returns the saved config and the repo-relative paths touched. */
-export function writeConnection(dir: string, config: ConnectionConfig): { config: ConnectionConfig; paths: string[] } {
+/**
+ * Writes a connection, its file named after it: renaming a connection
+ * renames its file. Returns the saved config, the repo-relative paths
+ * touched, and the previous slug when the file was renamed.
+ */
+export function writeConnection(
+  dir: string,
+  config: ConnectionConfig
+): { config: ConnectionConfig; paths: string[]; renamedFrom: string | null } {
   const existing = listConnections(dir).find((c) => c.id === config.id)
   const id = config.id || randomUUID()
-  const slug = existing?.slug ?? uniqueSlug(dir, config.name)
+  const slug = uniqueSlug(dir, config.name, existing?.slug)
   const saved: ConnectionConfig = { ...config, id, slug }
   // The slug is the file name, it is not repeated inside the file.
   const { slug: _slug, ...content } = saved
@@ -111,7 +119,25 @@ export function writeConnection(dir: string, config: ConnectionConfig): { config
   const path = `${CONNECTIONS_DIR}/${slug}.json`
   mkdirSync(join(dir, CONNECTIONS_DIR), { recursive: true })
   writeFileSync(join(dir, path), JSON.stringify(content, null, 2) + '\n')
-  return { config: saved, paths: [path] }
+  const paths = [path]
+  const renamedFrom = existing && existing.slug !== slug ? existing.slug : null
+  if (renamedFrom) {
+    const previous = `${CONNECTIONS_DIR}/${renamedFrom}.json`
+    rmSync(join(dir, previous), { force: true })
+    paths.push(previous)
+  }
+  return { config: saved, paths, renamedFrom }
+}
+
+/** Points the saved queries bound to a connection at its new slug; returns the paths touched. */
+export function rebindQueries(dir: string, fromSlug: string, toSlug: string): string[] {
+  const paths: string[] = []
+  for (const query of listQueries(dir)) {
+    if (query.connection !== fromSlug) continue
+    writeFileSync(queryFile(dir, query.path), serializeQuery({ ...query, connection: toSlug }))
+    paths.push(`${QUERIES_DIR}/${query.path}`)
+  }
+  return paths
 }
 
 export function deleteConnection(dir: string, connectionId: string): { config: ConnectionConfig; paths: string[] } {

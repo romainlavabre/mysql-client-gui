@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process'
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
@@ -181,6 +181,44 @@ describe('WorkspaceManager', () => {
     await ws.flush()
     expect(git(cloned.path, 'branch', '--show-current').trim()).toBe('master')
     expect(git(empty, 'branch', '--list').trim()).toBe('master')
+  })
+
+  it('renames the file of a renamed connection and rebinds its queries', async () => {
+    const { ws } = manager('alice')
+    const repo = await ws.clone('Shared', remote)
+    const dev4 = await ws.saveConnection({ config: connection('DEV 4'), secrets: { password: 'p' }, override: {} })
+    const copy = await ws.duplicateConnection(dev4.id)
+    expect(copy.slug).toBe('dev-4-copy')
+    await ws.saveQuery({ path: 'q.sql', name: 'Q', connection: 'dev-4-copy', sql: 'SELECT 1' })
+    await ws.saveQuery({ path: 'other.sql', name: 'O', connection: 'dev-4', sql: 'SELECT 2' })
+
+    const renamed = await ws.saveConnection({ ...ws.draft(copy.id), config: { ...ws.draft(copy.id).config, name: 'DEV 5' } })
+    await ws.flush()
+    expect(renamed.slug).toBe('dev-5')
+    expect(readdirSync(join(repo.path, 'connections')).sort()).toEqual(['.gitkeep', 'dev-4.json', 'dev-5.json'])
+    expect(ws.listQueries().map((q) => [q.path, q.connection])).toEqual([
+      ['other.sql', 'dev-4'],
+      ['q.sql', 'dev-5']
+    ])
+    // Same connection id: the local password follows.
+    expect(ws.draft(copy.id).secrets).toEqual({ password: 'p' })
+    expect(git(remote, 'log', '-1', '--format=%s', 'master').trim()).toBe('Rename connection "DEV 5"')
+    // Every change keeps its own commit message, even with syncs running in between.
+    expect(git(remote, 'log', '--format=%s', 'master').trim().split('\n')).toEqual([
+      'Rename connection "DEV 5"',
+      'Add query "O"',
+      'Add query "Q"',
+      'Add connection "DEV 4 (copy)"',
+      'Add connection "DEV 4"',
+      'Initialize workspace'
+    ])
+    expect(git(remote, 'show', '--name-status', '--format=', 'master')).toMatch(/R\d*\s+connections\/dev-4-copy\.json\s+connections\/dev-5\.json/)
+
+    // A name taken by another connection gets a suffix instead of overwriting it.
+    const clash = await ws.saveConnection({ ...ws.draft(renamed.id), config: { ...ws.draft(renamed.id).config, name: 'DEV 4' } })
+    expect(clash.slug).toBe('dev-4-2')
+    // Saving again under the same name keeps the file.
+    expect((await ws.saveConnection(ws.draft(clash.id))).slug).toBe('dev-4-2')
   })
 
   it('refuses query paths escaping the queries folder', async () => {
