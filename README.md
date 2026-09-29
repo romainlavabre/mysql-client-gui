@@ -1,3 +1,5 @@
+<img src="build/logo.svg" alt="" width="96" align="right">
+
 # MySQL Client GUI
 
 A fast desktop client for MySQL and MariaDB: the features of phpMyAdmin with an interface in the spirit of Beekeeper Studio.

@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <!-- MySQL Client GUI: a database whose connections and queries live in git. -->
+  <defs>
+    <linearGradient id="tile" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#262a34"/>
+      <stop offset="1" stop-color="#15171c"/>
+    </linearGradient>
+    <linearGradient id="body" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#d9962e"/>
+      <stop offset="0.45" stop-color="#f5bd4f"/>
+      <stop offset="1" stop-color="#e3a53c"/>
+    </linearGradient>
+    <linearGradient id="top" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffd98a"/>
+      <stop offset="1" stop-color="#f2b448"/>
+    </linearGradient>
+  </defs>
+
+  <rect x="0" y="0" width="512" height="512" rx="114" fill="url(#tile)"/>
+  <rect x="1.5" y="1.5" width="509" height="509" rx="112.5" fill="none" stroke="#ffffff" stroke-opacity="0.07" stroke-width="3"/>
+
+  <!-- Database: three slabs, drawn bottom first. -->
+  <g>
+    <path d="M92 318 v44 a132 40 0 0 0 264 0 v-44 a132 40 0 0 1 -264 0 z" fill="url(#body)"/>
+    <path d="M92 240 v44 a132 40 0 0 0 264 0 v-44 a132 40 0 0 1 -264 0 z" fill="url(#body)"/>
+    <path d="M92 162 v44 a132 40 0 0 0 264 0 v-44 a132 40 0 0 1 -264 0 z" fill="url(#body)"/>
+    <ellipse cx="224" cy="162" rx="132" ry="40" fill="url(#top)"/>
+  </g>
+
+  <!-- Git branch badge. -->
+  <g transform="translate(366 362) scale(0.9) translate(-378 -378)">
+  <circle cx="378" cy="378" r="98" fill="#15171c"/>
+  <circle cx="378" cy="378" r="84" fill="#20232b" stroke="#f5bd4f" stroke-width="6"/>
+  <g fill="none" stroke="#eef0f4" stroke-width="13" stroke-linecap="round">
+    <path d="M350 330 v96"/>
+    <path d="M406 346 c0 34 -56 30 -56 62"/>
+  </g>
+  <g fill="#20232b" stroke="#eef0f4" stroke-width="10">
+    <circle cx="350" cy="326" r="15"/>
+    <circle cx="350" cy="432" r="15"/>
+    <circle cx="406" cy="340" r="15" fill="#f5bd4f" stroke="#f5bd4f"/>
+  </g>
+  </g>
+</svg>

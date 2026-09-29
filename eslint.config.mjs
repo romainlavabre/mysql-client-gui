@@ -15,6 +15,15 @@ export default tseslint.config(
     }
   },
   {
+    // Build scripts run by Electron as plain CommonJS.
+    files: ['build/**/*.cjs'],
+    languageOptions: {
+      sourceType: 'commonjs',
+      globals: { require: 'readonly', process: 'readonly', __dirname: 'readonly', Buffer: 'readonly', console: 'readonly' }
+    },
+    rules: { '@typescript-eslint/no-require-imports': 'off' }
+  },
+  {
     rules: {
       '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }]
     }
