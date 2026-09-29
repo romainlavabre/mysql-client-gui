@@ -8,46 +8,54 @@ import { buildAlterTable, buildCreateTable } from '@shared/sql/ddl'
 import { api, errorMessage } from '../../lib/bridge'
 import { runStatements } from '../../lib/actions'
 import { SqlEditor } from '../../components/SqlEditor'
+import { SearchSelect, type SearchOption } from '../../components/SearchSelect'
+import { ColumnsPicker } from '../../components/ColumnsPicker'
+import {
+  COLUMN_TYPES,
+  formatColumnType,
+  fractionalDigits,
+  parseColumnType,
+  supportsOnUpdate,
+  supportsUnsigned,
+  typeInfo,
+  type TypeAttribute
+} from '@shared/sql/columnType'
 import { Button, ErrorBox, IconButton, Input, Select, Spinner } from '../../components/ui'
 import { closeTab, openTab, useApp, type StructureTab } from '../../store'
-
-const COMMON_TYPES = [
-  'int',
-  'int unsigned',
-  'bigint',
-  'bigint unsigned',
-  'tinyint(1)',
-  'smallint',
-  'decimal(10,2)',
-  'double',
-  'float',
-  'varchar(255)',
-  'char(36)',
-  'text',
-  'mediumtext',
-  'longtext',
-  'json',
-  'date',
-  'datetime',
-  'timestamp',
-  'time',
-  'year',
-  'blob',
-  'longblob',
-  'varbinary(255)',
-  "enum('a','b')",
-  'bit(1)'
-]
 
 const FK_ACTIONS = ['RESTRICT', 'CASCADE', 'SET NULL', 'NO ACTION', 'SET DEFAULT']
 const INDEX_KINDS: IndexDefinition['kind'][] = ['PRIMARY', 'UNIQUE', 'INDEX', 'FULLTEXT', 'SPATIAL']
 
-type DefaultMode = 'none' | 'null' | 'value' | 'expression'
+type DefaultMode = 'none' | 'null' | 'value' | 'now' | 'expression'
 
 function defaultMode(column: ColumnDefinition): DefaultMode {
   if (column.default === undefined) return 'none'
   if (column.default === null) return 'null'
+  if (column.defaultIsExpression && /^current_timestamp(\(\d*\))?$/i.test(column.default.trim())) return 'now'
   return column.defaultIsExpression ? 'expression' : 'value'
+}
+
+/** CURRENT_TIMESTAMP with the precision of the column: datetime(3) needs CURRENT_TIMESTAMP(3). */
+function currentTimestamp(type: string): string {
+  const digits = fractionalDigits(type)
+  return digits ? `CURRENT_TIMESTAMP(${digits})` : 'CURRENT_TIMESTAMP'
+}
+
+type AttributeChoice = TypeAttribute | 'on update'
+
+/** Column after picking another base type: sensible length, attributes that still apply. */
+function withBaseType(column: ColumnDefinition, base: string): Partial<ColumnDefinition> {
+  const parsed = parseColumnType(column.type)
+  if (base === 'boolean') return { type: 'tinyint(1)', onUpdateCurrentTimestamp: false }
+  const info = typeInfo(base)
+  const previous = typeInfo(parsed.base)
+  const sameFamily = previous && info && previous.family === info.family
+  const length = sameFamily ? parsed.length : (info?.defaultLength ?? '')
+  const attribute = supportsUnsigned(base) ? parsed.attribute : ''
+  const patch: Partial<ColumnDefinition> = { type: formatColumnType({ base, length, attribute }) }
+  if (!supportsOnUpdate(base)) patch.onUpdateCurrentTimestamp = false
+  if (defaultMode(column) === 'now' && info?.family !== 'datetime') patch.default = undefined
+  return patch
 }
 
 const emptyTable = (database: string): TableDefinition => ({
@@ -64,29 +72,6 @@ const emptyTable = (database: string): TableDefinition => ({
   indexes: [{ name: 'PRIMARY', kind: 'PRIMARY', columns: [{ name: 'id' }] }],
   foreignKeys: []
 })
-
-/** "a, b(10) DESC" ⇄ index columns. */
-function parseIndexColumns(text: string): IndexDefinition['columns'] {
-  return text
-    .split(',')
-    .map((part) => part.trim())
-    .filter(Boolean)
-    .map((part) => {
-      const match = /^`?([^`(\s]+)`?\s*(?:\((\d+)\))?\s*(ASC|DESC)?$/i.exec(part)
-      if (!match) return { name: part }
-      return { name: match[1], length: match[2] ? Number(match[2]) : null, order: match[3]?.toUpperCase() === 'DESC' ? 'DESC' : 'ASC' }
-    })
-}
-
-function formatIndexColumns(columns: IndexDefinition['columns']): string {
-  return columns.map((c) => `${c.name}${c.length ? `(${c.length})` : ''}${c.order === 'DESC' ? ' DESC' : ''}`).join(', ')
-}
-
-const splitList = (text: string): string[] =>
-  text
-    .split(',')
-    .map((s) => s.trim())
-    .filter(Boolean)
 
 const cell = 'border-b border-border/60 px-1 py-1'
 const cellInput = 'h-7 text-xs font-mono'
@@ -135,6 +120,20 @@ export function StructureTabView({ tab }: { tab: StructureTab }) {
   }, [original])
 
   const collations = useMemo(() => charsets?.flatMap((c) => c.collations).sort() ?? [], [charsets])
+  const { data: databases } = useQuery({ queryKey: ['databases', sessionId], queryFn: () => api.schema.databases({ sessionId }) })
+  const isMariaDb = session.info.isMariaDb
+  // Types of the other server flavour stay pickable, dimmed.
+  const typeOptions = useMemo<SearchOption[]>(
+    () =>
+      COLUMN_TYPES.map((t) => ({
+        value: t.name,
+        label: t.name.toUpperCase(),
+        group: t.group,
+        description: t.availability ? `${t.description} — ${t.availability === 'mariadb' ? 'MariaDB' : 'MySQL'} only` : t.description,
+        muted: (t.availability === 'mariadb' && !isMariaDb) || (t.availability === 'mysql' && isMariaDb)
+      })),
+    [isMariaDb]
+  )
 
   const statements = useMemo(() => {
     if (!def) return { sql: [] as string[], error: null as string | null }
@@ -185,6 +184,8 @@ export function StructureTabView({ tab }: { tab: StructureTab }) {
   }
 
   const tableNames = objects?.tables.filter((t) => t.kind === 'table').map((t) => t.name) ?? []
+  // Current names, so new and renamed columns can be indexed right away.
+  const columnNames = def.columns.map((c) => c.name).filter(Boolean)
 
   return (
     <Group orientation="vertical" className="h-full">
@@ -226,12 +227,6 @@ export function StructureTabView({ tab }: { tab: StructureTab }) {
             </label>
           </div>
 
-          <datalist id="column-types">
-            {COMMON_TYPES.map((t) => (
-              <option key={t} value={t} />
-            ))}
-          </datalist>
-
           <Section
             title="Columns"
             action={
@@ -244,15 +239,16 @@ export function StructureTabView({ tab }: { tab: StructureTab }) {
               </Button>
             }
           >
-            <table className="w-full min-w-[1000px] border-collapse text-xs">
+            <table className="w-full min-w-[1350px] border-collapse text-xs">
               <thead className="bg-panel text-left text-muted">
                 <tr>
                   <th className="px-2 py-1.5 font-semibold">Name</th>
                   <th className="px-2 py-1.5 font-semibold">Type</th>
-                  <th className="px-2 py-1.5 font-semibold">Null</th>
+                  <th className="px-2 py-1.5 font-semibold">Length / Values</th>
                   <th className="px-2 py-1.5 font-semibold">Default</th>
-                  <th className="px-2 py-1.5 font-semibold" title="Auto increment">AI</th>
-                  <th className="px-2 py-1.5 font-semibold" title="ON UPDATE CURRENT_TIMESTAMP">On upd.</th>
+                  <th className="px-2 py-1.5 font-semibold">Attributes</th>
+                  <th className="px-2 py-1.5 font-semibold">Null</th>
+                  <th className="px-2 py-1.5 font-semibold" title="Auto increment">A_I</th>
                   <th className="px-2 py-1.5 font-semibold">Collation</th>
                   <th className="px-2 py-1.5 font-semibold">Comment</th>
                   <th />
@@ -261,55 +257,98 @@ export function StructureTabView({ tab }: { tab: StructureTab }) {
               <tbody>
                 {def.columns.map((column, index) => {
                   const mode = defaultMode(column)
+                  const parsed = parseColumnType(column.type)
+                  const info = typeInfo(parsed.base)
+                  const attribute: AttributeChoice = column.onUpdateCurrentTimestamp ? 'on update' : parsed.attribute
                   return (
                     <tr key={index} className="hover:bg-hover/40">
                       <td className={cell}>
                         <Input className={cellInput} value={column.name} onChange={(e) => setColumn(index, { name: e.target.value })} />
                       </td>
-                      <td className={cell}>
-                        <Input className={cellInput} list="column-types" value={column.type} onChange={(e) => setColumn(index, { type: e.target.value })} />
+                      <td className={`${cell} w-40`}>
+                        <SearchSelect
+                          value={parsed.base}
+                          options={typeOptions}
+                          allowCustom
+                          onChange={(base) => setColumn(index, withBaseType(column, base.toLowerCase()))}
+                        />
                       </td>
-                      <td className={`${cell} text-center`}>
-                        <input type="checkbox" className="accent-[var(--accent)]" checked={column.nullable} onChange={(e) => setColumn(index, { nullable: e.target.checked })} />
+                      <td className={`${cell} w-36`}>
+                        <Input
+                          className={cellInput}
+                          value={parsed.length}
+                          placeholder={info?.lengthHint ?? ''}
+                          title={info?.lengthHint}
+                          onChange={(e) => setColumn(index, { type: formatColumnType({ ...parsed, length: e.target.value }) })}
+                        />
                       </td>
                       <td className={cell}>
                         <div className="flex gap-1">
                           <Select
-                            className="h-7 w-28 text-xs"
+                            className="h-7 w-44 shrink-0 text-xs"
                             value={mode}
                             onChange={(e) => {
                               const next = e.target.value as DefaultMode
                               setColumn(index, {
-                                default: next === 'none' ? undefined : next === 'null' ? null : (column.default ?? ''),
-                                defaultIsExpression: next === 'expression'
+                                default:
+                                  next === 'none'
+                                    ? undefined
+                                    : next === 'null'
+                                      ? null
+                                      : next === 'now'
+                                        ? currentTimestamp(column.type)
+                                        : mode === 'now'
+                                          ? ''
+                                          : (column.default ?? ''),
+                                defaultIsExpression: next === 'expression' || next === 'now'
                               })
                             }}
                           >
                             <option value="none">None</option>
                             <option value="null">NULL</option>
-                            <option value="value">Value</option>
+                            <option value="value">As defined</option>
+                            {(info?.family === 'datetime' || mode === 'now') && <option value="now">CURRENT_TIMESTAMP</option>}
                             <option value="expression">Expression</option>
                           </Select>
                           {(mode === 'value' || mode === 'expression') && (
                             <Input
                               className={cellInput}
                               value={column.default ?? ''}
-                              placeholder={mode === 'expression' ? 'CURRENT_TIMESTAMP' : ''}
+                              placeholder={mode === 'expression' ? 'e.g. (UUID())' : ''}
                               onChange={(e) => setColumn(index, { default: e.target.value })}
                             />
                           )}
                         </div>
                       </td>
-                      <td className={`${cell} text-center`}>
-                        <input type="checkbox" className="accent-[var(--accent)]" checked={column.autoIncrement} onChange={(e) => setColumn(index, { autoIncrement: e.target.checked })} />
+                      <td className={cell}>
+                        <Select
+                          className="h-7 w-60 text-xs"
+                          value={attribute}
+                          onChange={(e) => {
+                            const next = e.target.value as AttributeChoice
+                            setColumn(index, {
+                              type: formatColumnType({ ...parsed, attribute: next === 'on update' ? '' : next }),
+                              onUpdateCurrentTimestamp: next === 'on update'
+                            })
+                          }}
+                        >
+                          <option value="">—</option>
+                          {(supportsUnsigned(parsed.base) || parsed.attribute) && (
+                            <>
+                              <option value="unsigned">UNSIGNED</option>
+                              <option value="unsigned zerofill">UNSIGNED ZEROFILL</option>
+                            </>
+                          )}
+                          {(supportsOnUpdate(parsed.base) || column.onUpdateCurrentTimestamp) && (
+                            <option value="on update">on update CURRENT_TIMESTAMP</option>
+                          )}
+                        </Select>
                       </td>
                       <td className={`${cell} text-center`}>
-                        <input
-                          type="checkbox"
-                          className="accent-[var(--accent)]"
-                          checked={!!column.onUpdateCurrentTimestamp}
-                          onChange={(e) => setColumn(index, { onUpdateCurrentTimestamp: e.target.checked })}
-                        />
+                        <input type="checkbox" className="accent-[var(--accent)]" checked={column.nullable} onChange={(e) => setColumn(index, { nullable: e.target.checked })} />
+                      </td>
+                      <td className={`${cell} text-center`}>
+                        <input type="checkbox" className="accent-[var(--accent)]" checked={column.autoIncrement} onChange={(e) => setColumn(index, { autoIncrement: e.target.checked })} />
                       </td>
                       <td className={cell}>
                         <Select
@@ -363,7 +402,7 @@ export function StructureTabView({ tab }: { tab: StructureTab }) {
                 <tr>
                   <th className="px-2 py-1.5 font-semibold">Name</th>
                   <th className="px-2 py-1.5 font-semibold">Kind</th>
-                  <th className="px-2 py-1.5 font-semibold">Columns (e.g. a, b(10) DESC)</th>
+                  <th className="px-2 py-1.5 font-semibold">Columns (click one for its length and order)</th>
                   <th />
                 </tr>
               </thead>
@@ -390,7 +429,7 @@ export function StructureTabView({ tab }: { tab: StructureTab }) {
                       </Select>
                     </td>
                     <td className={cell}>
-                      <IndexColumnsInput value={index.columns} onChange={(columns) => setIndex(i, { columns })} />
+                      <ColumnsPicker value={index.columns} columns={columnNames} onChange={(columns) => setIndex(i, { columns })} withOptions />
                     </td>
                     <td className={cell}>
                       <IconButton label="Delete index" onClick={() => set({ indexes: def.indexes.filter((_, j) => j !== i) })} className="size-6 hover:text-danger">
@@ -427,6 +466,7 @@ export function StructureTabView({ tab }: { tab: StructureTab }) {
                 <tr>
                   <th className="px-2 py-1.5 font-semibold">Name</th>
                   <th className="px-2 py-1.5 font-semibold">Columns</th>
+                  <th className="px-2 py-1.5 font-semibold">Referenced database</th>
                   <th className="px-2 py-1.5 font-semibold">Referenced table</th>
                   <th className="px-2 py-1.5 font-semibold">Referenced columns</th>
                   <th className="px-2 py-1.5 font-semibold">On update</th>
@@ -436,44 +476,19 @@ export function StructureTabView({ tab }: { tab: StructureTab }) {
               </thead>
               <tbody>
                 {def.foreignKeys.map((fk, i) => (
-                  <tr key={i}>
-                    <td className={cell}>
-                      <Input className={cellInput} value={fk.name} onChange={(e) => setFk(i, { name: e.target.value })} />
-                    </td>
-                    <td className={cell}>
-                      <ListInput value={fk.columns} onChange={(columns) => setFk(i, { columns })} placeholder="user_id" />
-                    </td>
-                    <td className={cell}>
-                      <Input className={cellInput} list="fk-tables" value={fk.refTable} onChange={(e) => setFk(i, { refTable: e.target.value })} />
-                    </td>
-                    <td className={cell}>
-                      <ListInput value={fk.refColumns} onChange={(refColumns) => setFk(i, { refColumns })} placeholder="id" />
-                    </td>
-                    {(['onUpdate', 'onDelete'] as const).map((key) => (
-                      <td key={key} className={cell}>
-                        <Select className="h-7 w-32 text-xs" value={fk[key]} onChange={(e) => setFk(i, { [key]: e.target.value })}>
-                          {FK_ACTIONS.map((a) => (
-                            <option key={a} value={a}>
-                              {a}
-                            </option>
-                          ))}
-                        </Select>
-                      </td>
-                    ))}
-                    <td className={cell}>
-                      <IconButton label="Delete foreign key" onClick={() => set({ foreignKeys: def.foreignKeys.filter((_, j) => j !== i) })} className="size-6 hover:text-danger">
-                        <Trash2 className="size-3.5" />
-                      </IconButton>
-                    </td>
-                  </tr>
+                  <ForeignKeyRow
+                    key={i}
+                    fk={fk}
+                    database={tab.database}
+                    columns={columnNames}
+                    tables={tableNames}
+                    databases={databases?.map((d) => d.name) ?? []}
+                    onChange={(patch) => setFk(i, patch)}
+                    onDelete={() => set({ foreignKeys: def.foreignKeys.filter((_, j) => j !== i) })}
+                  />
                 ))}
               </tbody>
             </table>
-            <datalist id="fk-tables">
-              {tableNames.map((t) => (
-                <option key={t} value={t} />
-              ))}
-            </datalist>
           </Section>
         </div>
       </Panel>
@@ -509,17 +524,87 @@ export function StructureTabView({ tab }: { tab: StructureTab }) {
   )
 }
 
-/** Text input for a list, parsed on blur so typing commas is not disrupted. */
-function ListInput({ value, onChange, placeholder }: { value: string[]; onChange: (value: string[]) => void; placeholder?: string }) {
-  const [text, setText] = useState(value.join(', '))
-  useEffect(() => setText(value.join(', ')), [value])
+function ForeignKeyRow({
+  fk,
+  database,
+  columns,
+  tables,
+  databases,
+  onChange,
+  onDelete
+}: {
+  fk: ForeignKeyDefinition
+  database: string
+  columns: string[]
+  tables: string[]
+  databases: string[]
+  onChange: (patch: Partial<ForeignKeyDefinition>) => void
+  onDelete: () => void
+}) {
+  const sessionId = useApp((s) => s.session!.info.sessionId)
+  const refDatabase = fk.refDatabase || database
+  // Tables and columns of the referenced database (usually the same one).
+  const { data: refSchema } = useQuery({
+    queryKey: ['completion', sessionId, refDatabase],
+    queryFn: () => api.schema.completion({ sessionId, database: refDatabase }),
+    staleTime: 5 * 60_000
+  })
+  const refTables = refDatabase === database ? tables : Object.keys(refSchema ?? {})
+  const refColumns = refSchema?.[fk.refTable] ?? []
   return (
-    <Input className={cellInput} value={text} placeholder={placeholder} onChange={(e) => setText(e.target.value)} onBlur={() => onChange(splitList(text))} />
+    <tr>
+      <td className={cell}>
+        <Input className={cellInput} value={fk.name} onChange={(e) => onChange({ name: e.target.value })} />
+      </td>
+      <td className={cell}>
+        <ColumnsPicker
+          value={fk.columns.map((name) => ({ name }))}
+          columns={columns}
+          onChange={(picked) => onChange({ columns: picked.map((c) => c.name) })}
+        />
+      </td>
+      <td className={`${cell} w-40`}>
+        <SearchSelect
+          value={refDatabase}
+          options={databases.map((d) => ({ value: d }))}
+          onChange={(next) => onChange({ refDatabase: next === database ? undefined : next, refTable: '', refColumns: [] })}
+        />
+      </td>
+      <td className={`${cell} w-44`}>
+        <SearchSelect
+          value={fk.refTable}
+          options={refTables.map((t) => ({ value: t }))}
+          placeholder="Table…"
+          onChange={(refTable) => {
+            // Point at the primary key convention by default.
+            const candidates = refSchema?.[refTable] ?? []
+            onChange({ refTable, refColumns: candidates.includes('id') ? ['id'] : [] })
+          }}
+        />
+      </td>
+      <td className={cell}>
+        <ColumnsPicker
+          value={fk.refColumns.map((name) => ({ name }))}
+          columns={refColumns}
+          onChange={(picked) => onChange({ refColumns: picked.map((c) => c.name) })}
+        />
+      </td>
+      {(['onUpdate', 'onDelete'] as const).map((key) => (
+        <td key={key} className={cell}>
+          <Select className="h-7 w-32 text-xs" value={fk[key]} onChange={(e) => onChange({ [key]: e.target.value })}>
+            {FK_ACTIONS.map((a) => (
+              <option key={a} value={a}>
+                {a}
+              </option>
+            ))}
+          </Select>
+        </td>
+      ))}
+      <td className={cell}>
+        <IconButton label="Delete foreign key" onClick={onDelete} className="size-6 hover:text-danger">
+          <Trash2 className="size-3.5" />
+        </IconButton>
+      </td>
+    </tr>
   )
-}
-
-function IndexColumnsInput({ value, onChange }: { value: IndexDefinition['columns']; onChange: (value: IndexDefinition['columns']) => void }) {
-  const [text, setText] = useState(formatIndexColumns(value))
-  useEffect(() => setText(formatIndexColumns(value)), [value])
-  return <Input className={cellInput} value={text} onChange={(e) => setText(e.target.value)} onBlur={() => onChange(parseIndexColumns(text))} />
 }

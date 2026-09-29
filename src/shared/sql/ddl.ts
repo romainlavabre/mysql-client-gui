@@ -8,6 +8,7 @@ import type {
   TableDetails
 } from '../types'
 import { qualified, quoteIdent, quoteString } from './quote'
+import { fractionalDigits } from './columnType'
 
 export function columnSql(column: ColumnDefinition): string {
   const parts = [quoteIdent(column.name), column.type.trim()]
@@ -23,7 +24,11 @@ export function columnSql(column: ColumnDefinition): string {
       else if (column.defaultIsExpression) parts.push(`DEFAULT ${wrapDefaultExpression(column.default)}`)
       else parts.push(`DEFAULT ${quoteString(column.default)}`)
     }
-    if (column.onUpdateCurrentTimestamp) parts.push('ON UPDATE CURRENT_TIMESTAMP')
+    if (column.onUpdateCurrentTimestamp) {
+      // datetime(3) needs CURRENT_TIMESTAMP(3): the precision must match the column.
+      const digits = fractionalDigits(column.type)
+      parts.push(`ON UPDATE CURRENT_TIMESTAMP${digits ? `(${digits})` : ''}`)
+    }
     if (column.autoIncrement) parts.push('AUTO_INCREMENT')
   }
   if (column.comment) parts.push(`COMMENT ${quoteString(column.comment)}`)
