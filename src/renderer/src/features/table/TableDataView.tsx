@@ -29,6 +29,7 @@ import { Button, Dialog, ErrorBox, IconButton, Select, Spinner } from '../../com
 import { openTab, useApp, type TableTab } from '../../store'
 import { openIo } from '../io/ioStore'
 import { FilterBar } from './FilterBar'
+import type { CompletionData } from '../../lib/sqlCompletion'
 
 const PAGE_SIZES = [100, 250, 500, 1000, 5000]
 
@@ -84,7 +85,8 @@ export function TableDataView({ tab, details }: { tab: TableTab; details: TableD
     sessionId,
     database: tab.database,
     table: tab.table,
-    filters: applied.filters.filter((f) => f.column),
+    // A column name being typed (or misspelt) is ignored rather than breaking the query.
+    filters: applied.filters.filter((f) => details.columns.some((c) => c.name === f.column)),
     rawWhere: applied.rawWhere || undefined
   }
 
@@ -101,6 +103,29 @@ export function TableDataView({ tab, details }: { tab: TableTab; details: TableD
     queryFn: () => api.data.count(request),
     enabled: false
   })
+
+  const { data: databases } = useQuery({ queryKey: ['databases', sessionId], queryFn: () => api.schema.databases({ sessionId }) })
+  const { data: databaseCompletion } = useQuery({
+    queryKey: ['completion', sessionId, tab.database],
+    queryFn: () => api.schema.completion({ sessionId, database: tab.database }),
+    enabled: showFilters,
+    staleTime: 5 * 60_000
+  })
+  // Columns of this table first; other tables and databases for sub-queries.
+  const filterCompletion = useMemo<CompletionData>(
+    () => ({
+      tables: { ...databaseCompletion, [tab.table]: details.columns.map((c) => c.name) },
+      defaultTables: [tab.table],
+      databases: databases?.map((d) => d.name) ?? [],
+      loadDatabase: (database) =>
+        queryClient.fetchQuery({
+          queryKey: ['completion', sessionId, database],
+          queryFn: () => api.schema.completion({ sessionId, database }),
+          staleTime: 5 * 60_000
+        })
+    }),
+    [databaseCompletion, databases, details, queryClient, sessionId, tab.table]
+  )
 
   const keyColumns = useMemo(() => rowKeyColumns(details), [details])
   const editable = !tab.isView && keyColumns.length > 0 && !session.connection.readOnly
@@ -351,6 +376,7 @@ export function TableDataView({ tab, details }: { tab: TableTab; details: TableD
           rawWhere={rawWhere}
           onChange={setFilters}
           onRawWhereChange={setRawWhere}
+          completion={filterCompletion}
           onApply={() =>
             void guardPending(() => {
               setApplied({ filters, rawWhere })

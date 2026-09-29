@@ -15,6 +15,7 @@ import { updateTab, useApp, type QueryTab } from '../../store'
 import { invalidateSchema } from '../../lib/actions'
 import { useQueryClient } from '@tanstack/react-query'
 import { ResultsPanel } from './ResultsPanel'
+import type { CompletionData } from '../../lib/sqlCompletion'
 import { SaveQueryDialog } from '../saved/SaveQueryDialog'
 import { useSavedQueries } from '../workspace/useWorkspace'
 
@@ -39,6 +40,21 @@ export function QueryTabView({ tab }: { tab: QueryTab }) {
     enabled: !!tab.database,
     staleTime: 5 * 60_000
   })
+
+  const completionData = useMemo<CompletionData>(
+    () => ({
+      tables: completion ?? {},
+      databases: databases?.map((d) => d.name) ?? [],
+      // Other databases (db.table) are loaded when first typed, then cached.
+      loadDatabase: (database) =>
+        queryClient.fetchQuery({
+          queryKey: ['completion', sessionId, database],
+          queryFn: () => api.schema.completion({ sessionId, database }),
+          staleTime: 5 * 60_000
+        })
+    }),
+    [completion, databases, queryClient, sessionId]
+  )
 
   // Latest tab value for the keyboard handlers, which are created once.
   const tabRef = useRef(tab)
@@ -186,8 +202,7 @@ export function QueryTabView({ tab }: { tab: QueryTab }) {
             ref={editor}
             value={tab.sql}
             onChange={(sql) => updateTab<QueryTab>(tab.id, { sql })}
-            schema={completion}
-            database={tab.database}
+            completion={completionData}
             keys={keys}
             placeholder="SELECT * FROM …"
           />

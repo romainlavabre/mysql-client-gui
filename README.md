@@ -14,13 +14,15 @@ between workspaces — one per client or project — from the sidebar. Passwords
   (so `~/.ssh/config` aliases, `ProxyJump`, the agent and `known_hosts` all apply), environment tag with a color (production
   in red), read-only mode enforced both by the app and by the server (`SET SESSION TRANSACTION READ ONLY`). A per-user
   override of the shared user name.
-- **SQL editor** — MySQL syntax highlighting, completion of keywords, tables and columns, run the statement under the
+- **SQL editor** — MySQL syntax highlighting, completion of keywords, tables, columns (of the tables in the statement,
+  after `alias.`, and `db.table.column` in other databases, loaded on demand), run the statement under the
   cursor / the selection / everything, multiple result sets, cancel a running query (`KILL QUERY`), `EXPLAIN`, formatting,
   one dedicated connection per tab (so `USE`, variables and transactions stay on the tab), local history, tabs restored on
   reconnect.
 - **Safety** — confirmation before `UPDATE` / `DELETE` without `WHERE`, `DROP`, `TRUNCATE`, and before any write on a
   production connection (typing the connection name for destructive statements).
-- **Table data** — paginated browsing, column filters (`=`, `LIKE`, `IN`, `BETWEEN`, `IS NULL`…) and raw `WHERE`,
+- **Table data** — paginated browsing, column filters (`=`, `LIKE`, `IN`, `BETWEEN`, `IS NULL`…) and a raw `WHERE` with
+  column completion,
   server-side sorting, inline editing with a review of the pending changes applied in one transaction, add / duplicate /
   delete rows, `NULL` values, JSON / long text / binary viewer, jump to the row referenced by a foreign key.
 - **Structure** — create and alter tables (columns, types, defaults, auto increment, generated columns, collations,

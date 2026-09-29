@@ -1,7 +1,7 @@
 // CodeMirror 6 SQL editor with MySQL dialect and schema-aware completion.
 import { autocompletion, closeBrackets, closeBracketsKeymap, completionKeymap } from '@codemirror/autocomplete'
 import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirror/commands'
-import { MySQL, sql, type SQLNamespace } from '@codemirror/lang-sql'
+import { MySQL, sql } from '@codemirror/lang-sql'
 import { bracketMatching, defaultHighlightStyle, indentOnInput, syntaxHighlighting } from '@codemirror/language'
 import { highlightSelectionMatches, searchKeymap } from '@codemirror/search'
 import { Compartment, EditorState, type Extension } from '@codemirror/state'
@@ -17,7 +17,7 @@ import {
   type KeyBinding
 } from '@codemirror/view'
 import { forwardRef, useEffect, useImperativeHandle, useRef } from 'react'
-import type { CompletionSchema } from '@shared/types'
+import { sqlCompletionSources, type CompletionData } from '../lib/sqlCompletion'
 import { useApp } from '../store'
 
 export interface SqlEditorHandle {
@@ -48,20 +48,15 @@ function themeFor(theme: 'dark' | 'light'): Extension {
   return theme === 'dark' ? [oneDark, darkTweaks] : [lightTheme, syntaxHighlighting(defaultHighlightStyle)]
 }
 
-function sqlLanguage(schema: CompletionSchema | undefined, defaultSchema: string | null): Extension {
-  return sql({
-    dialect: MySQL,
-    upperCaseKeywords: true,
-    schema: (schema ?? {}) as SQLNamespace,
-    defaultSchema: defaultSchema ?? undefined
-  })
+function sqlLanguage(): Extension {
+  return sql({ dialect: MySQL, upperCaseKeywords: true })
 }
 
 interface Props {
   value: string
   onChange?: (value: string) => void
-  schema?: CompletionSchema
-  database?: string | null
+  /** Tables, columns and databases offered by the completion. */
+  completion?: CompletionData | null
   readOnly?: boolean
   placeholder?: string
   /** Extra shortcuts (run, save...), evaluated before the defaults. */
@@ -70,7 +65,7 @@ interface Props {
 }
 
 export const SqlEditor = forwardRef<SqlEditorHandle, Props>(function SqlEditor(
-  { value, onChange, schema, database, readOnly = false, placeholder, keys = [], className },
+  { value, onChange, completion, readOnly = false, placeholder, keys = [], className },
   ref
 ) {
   const host = useRef<HTMLDivElement>(null)
@@ -79,6 +74,9 @@ export const SqlEditor = forwardRef<SqlEditorHandle, Props>(function SqlEditor(
   const compartments = useRef({ theme: new Compartment(), language: new Compartment(), keys: new Compartment(), readOnly: new Compartment() })
   const onChangeRef = useRef(onChange)
   onChangeRef.current = onChange
+  // Read by the completion source at each request, so schema changes need no reconfiguration.
+  const completionRef = useRef(completion ?? null)
+  completionRef.current = completion ?? null
 
   useEffect(() => {
     const c = compartments.current
@@ -92,13 +90,14 @@ export const SqlEditor = forwardRef<SqlEditorHandle, Props>(function SqlEditor(
         indentOnInput(),
         bracketMatching(),
         closeBrackets(),
-        autocompletion({ activateOnTyping: true }),
+        // Tables and columns from our schema-aware source, then keywords.
+        autocompletion({ activateOnTyping: true, override: sqlCompletionSources(() => completionRef.current) }),
         highlightActiveLine(),
         highlightSelectionMatches(),
         EditorView.lineWrapping,
         c.keys.of(keymap.of(keys)),
         keymap.of([...closeBracketsKeymap, ...defaultKeymap, ...searchKeymap, ...historyKeymap, ...completionKeymap, indentWithTab]),
-        c.language.of(sqlLanguage(schema, database ?? null)),
+        c.language.of(sqlLanguage()),
         c.theme.of(themeFor(theme)),
         c.readOnly.of([EditorState.readOnly.of(readOnly), EditorView.editable.of(!readOnly)]),
         placeholder ? placeholderExtension(placeholder) : [],
@@ -119,10 +118,6 @@ export const SqlEditor = forwardRef<SqlEditorHandle, Props>(function SqlEditor(
   useEffect(() => {
     view.current?.dispatch({ effects: compartments.current.theme.reconfigure(themeFor(theme)) })
   }, [theme])
-
-  useEffect(() => {
-    view.current?.dispatch({ effects: compartments.current.language.reconfigure(sqlLanguage(schema, database ?? null)) })
-  }, [schema, database])
 
   useEffect(() => {
     view.current?.dispatch({ effects: compartments.current.keys.reconfigure(keymap.of(keys)) })
