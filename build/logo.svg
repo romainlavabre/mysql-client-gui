@@ -23,7 +23,7 @@
       <stop offset="1" stop-color="#c9864a"/>
     </linearGradient>
     <clipPath id="head">
-      <path id="head-shape" d="M256 104 C314 104 350 144 353 196 C356 238 336 266 318 288 C303 306 288 318 256 320 C224 318 209 306 194 288 C176 266 156 238 159 196 C162 144 198 104 256 104 Z"/>
+      <path d="M256 104 C314 104 350 144 353 196 C356 238 336 266 318 288 C303 306 288 318 256 320 C224 318 209 306 194 288 C176 266 156 238 159 196 C162 144 198 104 256 104 Z"/>
     </clipPath>
   </defs>
 
@@ -37,14 +37,15 @@
     <ellipse cx="256" cy="326" rx="146" ry="38" fill="url(#top)"/>
 
     <!-- Ears: tan, folding forward at the tips. -->
-    <g id="ear">
-      <path d="M214 128 C190 96 146 84 108 98 C112 124 126 150 146 170 C170 160 194 146 214 128 Z" fill="url(#tan)"/>
-      <path d="M108 98 C112 124 126 150 146 170 C140 150 132 128 130 108 Z" fill="#a8672f"/>
-    </g>
-    <use href="#ear" transform="translate(512 0) scale(-1 1)"/>
+    <!-- Written out rather than mirrored with <use>, which some SVG viewers do not render. -->
+    <!-- Semi-drop ears: they rise from the head, crease, and the tip flops outward. -->
+    <path d="M236 122 C214 96 186 82 158 86 C136 90 118 106 112 128 C108 142 112 156 124 158 C140 160 160 150 180 144 C196 138 214 132 236 122 Z" fill="url(#tan)"/>
+    <path d="M158 86 C136 90 118 106 112 128 C108 142 112 156 124 158 C136 156 146 140 152 124 C156 110 158 98 158 86 Z" fill="#b8733a"/>
+    <path d="M276 122 C298 96 326 82 354 86 C376 90 394 106 400 128 C404 142 400 156 388 158 C372 160 352 150 332 144 C316 138 298 132 276 122 Z" fill="url(#tan)"/>
+    <path d="M354 86 C376 90 394 106 400 128 C404 142 400 156 388 158 C376 156 366 140 360 124 C356 110 354 98 354 86 Z" fill="#b8733a"/>
 
     <!-- Head: white with the tan mask, a white blaze down the middle. -->
-    <use href="#head-shape" fill="url(#fur)"/>
+    <path d="M256 104 C314 104 350 144 353 196 C356 238 336 266 318 288 C303 306 288 318 256 320 C224 318 209 306 194 288 C176 266 156 238 159 196 C162 144 198 104 256 104 Z" fill="url(#fur)"/>
     <g clip-path="url(#head)">
       <path d="M246 96 C236 130 232 170 234 204 C236 226 232 244 222 256 C200 270 170 262 146 244 L146 96 Z" fill="url(#tan)"/>
       <path d="M266 96 C276 130 280 170 278 204 C276 226 280 244 290 256 C312 270 342 262 366 244 L366 96 Z" fill="url(#tan)"/>
