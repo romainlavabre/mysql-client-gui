@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { quoteIdent, quoteValue } from '@shared/sql/quote'
 import { buildOrderBy, buildWhere } from '@shared/sql/filters'
 import { rowChangeToSql } from '@shared/sql/rowChanges'
-import { grantSql, revokeSql } from '@shared/sql/admin'
+import { grantSql, privilegeChangesSql, revokeSql } from '@shared/sql/admin'
 import { isDestructive, isUnboundedWrite, isWriteStatement } from '@shared/sql/classify'
 
 describe('quoting', () => {
@@ -67,6 +67,28 @@ describe('privileges', () => {
       "GRANT SELECT, INSERT ON `app`.* TO 'bob'@'%' WITH GRANT OPTION"
     )
     expect(revokeSql('bob', 'localhost', { kind: 'global' }, ['SELECT'], false)).toBe("REVOKE SELECT ON *.* FROM 'bob'@'localhost'")
+  })
+  it('turns checked / unchecked privileges into GRANT and REVOKE', () => {
+    const level = { kind: 'database', database: 'app' } as const
+    expect(
+      privilegeChangesSql('bob', '%', level, { privileges: ['SELECT', 'INSERT'], grantOption: false }, { privileges: ['SELECT', 'DELETE'], grantOption: true })
+    ).toEqual(["REVOKE INSERT ON `app`.* FROM 'bob'@'%'", "GRANT DELETE ON `app`.* TO 'bob'@'%' WITH GRANT OPTION"])
+    expect(privilegeChangesSql('bob', '%', level, { privileges: ['SELECT'], grantOption: true }, { privileges: ['SELECT'], grantOption: false })).toEqual([
+      "REVOKE GRANT OPTION ON `app`.* FROM 'bob'@'%'"
+    ])
+    expect(privilegeChangesSql('bob', '%', level, { privileges: ['SELECT'], grantOption: false }, { privileges: ['SELECT'], grantOption: true })).toEqual([
+      "GRANT USAGE ON `app`.* TO 'bob'@'%' WITH GRANT OPTION"
+    ])
+    expect(privilegeChangesSql('bob', '%', level, { privileges: ['SELECT'], grantOption: false }, { privileges: ['SELECT'], grantOption: false })).toEqual([])
+  })
+  it('leaves privileges it does not manage untouched', () => {
+    // BACKUP_ADMIN (MySQL dynamic privilege) and FILE (global only) are ignored at database level.
+    expect(
+      privilegeChangesSql('bob', '%', { kind: 'global' }, { privileges: ['BACKUP_ADMIN', 'SELECT'], grantOption: false }, { privileges: [], grantOption: false })
+    ).toEqual(["REVOKE SELECT ON *.* FROM 'bob'@'%'"])
+    expect(
+      privilegeChangesSql('bob', '%', { kind: 'database', database: 'app' }, { privileges: [], grantOption: false }, { privileges: ['FILE'], grantOption: false })
+    ).toEqual([])
   })
   it('rejects injected privileges', () => {
     expect(() => grantSql('a', '%', { kind: 'global' }, ['SELECT; DROP'], false)).toThrow()

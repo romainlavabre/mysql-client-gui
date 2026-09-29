@@ -12,12 +12,13 @@ import type {
   ExecuteResponse,
   ExportRowsRequest,
   ExportTableRequest,
-  GrantRequest,
   HistoryEntry,
   ImportCsvRequest,
   ImportSqlRequest,
   JobProgress,
   MaintenanceOp,
+  PrivilegeLevel,
+  PrivilegeSet,
   ProcessInfo,
   RowChangesRequest,
   SavedQuery,
@@ -118,8 +119,10 @@ export interface Api {
     createUser(args: { sessionId: string; user: string; host: string; password: string }): Promise<void>
     dropUser(args: { sessionId: string; user: string; host: string }): Promise<void>
     setPassword(args: { sessionId: string; user: string; host: string; password: string }): Promise<void>
-    grant(args: GrantRequest): Promise<void>
-    revoke(args: GrantRequest): Promise<void>
+    /** Current privileges of an account at one level. */
+    privileges(args: { sessionId: string; user: string; host: string; level: PrivilegeLevel }): Promise<PrivilegeSet>
+    /** Levels (global, databases, tables) where the account has privileges. */
+    privilegeLevels(args: { sessionId: string; user: string; host: string }): Promise<PrivilegeLevel[]>
     maintenance(args: {
       sessionId: string
       database: string
@@ -181,8 +184,8 @@ export const API_METHODS: { [D in keyof Api]: (keyof Api[D])[] } = {
     'createUser',
     'dropUser',
     'setPassword',
-    'grant',
-    'revoke',
+    'privileges',
+    'privilegeLevels',
     'maintenance'
   ],
   dialog: ['openFile', 'saveFile', 'openDirectory'],

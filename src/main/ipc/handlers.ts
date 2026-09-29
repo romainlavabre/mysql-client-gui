@@ -193,8 +193,8 @@ export function createHandlers(ctx: HandlerContext): Api {
       createUser: ({ sessionId, user, host, password }) => admin.createUser(refuseReadOnly(sessionId).pool, user, host, password),
       dropUser: ({ sessionId, user, host }) => admin.dropUser(refuseReadOnly(sessionId).pool, user, host),
       setPassword: ({ sessionId, user, host, password }) => admin.setPassword(refuseReadOnly(sessionId).pool, user, host, password),
-      grant: (request) => admin.grant(refuseReadOnly(request.sessionId).pool, request),
-      revoke: (request) => admin.revoke(refuseReadOnly(request.sessionId).pool, request),
+      privileges: ({ sessionId, user, host, level }) => admin.privileges(session(sessionId).pool, user, host, level),
+      privilegeLevels: ({ sessionId, user, host }) => admin.privilegeLevels(session(sessionId).pool, user, host),
       maintenance: ({ sessionId, database, tables, op }) => {
         const s = op === 'ANALYZE' || op === 'CHECK' ? session(sessionId) : refuseReadOnly(sessionId)
         return admin.maintenance(s.pool, database, tables, op)

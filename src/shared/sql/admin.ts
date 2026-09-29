@@ -1,5 +1,5 @@
 // SQL for user and privilege management.
-import type { PrivilegeLevel } from '../types'
+import type { PrivilegeLevel, PrivilegeSet } from '../types'
 import { quoteIdent, quoteString } from './quote'
 
 export const PRIVILEGES = {
@@ -32,6 +32,55 @@ export const PRIVILEGES = {
     'CREATE USER'
   ]
 } as const
+
+/** Static privileges that can be granted at each level (GRANT OPTION is handled apart). */
+export const PRIVILEGES_BY_LEVEL: Record<PrivilegeLevel['kind'], { group: string; privileges: string[] }[]> = {
+  global: [
+    { group: 'Data', privileges: [...PRIVILEGES.data] },
+    { group: 'Structure', privileges: [...PRIVILEGES.structure] },
+    { group: 'Administration', privileges: PRIVILEGES.administration.filter((p) => p !== 'GRANT OPTION') }
+  ],
+  database: [
+    { group: 'Data', privileges: ['SELECT', 'INSERT', 'UPDATE', 'DELETE'] },
+    { group: 'Structure', privileges: [...PRIVILEGES.structure] },
+    { group: 'Administration', privileges: ['LOCK TABLES'] }
+  ],
+  table: [
+    { group: 'Data', privileges: ['SELECT', 'INSERT', 'UPDATE', 'DELETE'] },
+    { group: 'Structure', privileges: ['CREATE', 'ALTER', 'INDEX', 'DROP', 'SHOW VIEW', 'CREATE VIEW', 'TRIGGER', 'REFERENCES'] },
+    { group: 'Administration', privileges: [] }
+  ]
+}
+
+export function privilegesForLevel(kind: PrivilegeLevel['kind']): string[] {
+  return PRIVILEGES_BY_LEVEL[kind].flatMap((g) => g.privileges)
+}
+
+/**
+ * GRANT / REVOKE statements turning the current privileges of an account at
+ * a level into the desired ones. Privileges this editor does not manage
+ * (MySQL dynamic privileges, column grants) are left untouched.
+ */
+export function privilegeChangesSql(
+  user: string,
+  host: string,
+  level: PrivilegeLevel,
+  current: PrivilegeSet,
+  desired: PrivilegeSet
+): string[] {
+  const managed = new Set(privilegesForLevel(level.kind))
+  const has = new Set(current.privileges.filter((p) => managed.has(p)))
+  const wants = new Set(desired.privileges.filter((p) => managed.has(p)))
+  const removed = [...has].filter((p) => !wants.has(p))
+  const added = [...wants].filter((p) => !has.has(p))
+  const statements: string[] = []
+  if (removed.length > 0) statements.push(revokeSql(user, host, level, removed, false))
+  if (current.grantOption && !desired.grantOption) statements.push(revokeSql(user, host, level, [], true))
+  const addGrantOption = desired.grantOption && !current.grantOption
+  if (added.length > 0) statements.push(grantSql(user, host, level, added, addGrantOption))
+  else if (addGrantOption) statements.push(grantSql(user, host, level, ['USAGE'], true))
+  return statements
+}
 
 export function account(user: string, host: string): string {
   return `${quoteString(user)}@${quoteString(host)}`

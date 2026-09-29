@@ -4,7 +4,8 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync 
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import type { ConnectionDraft, RowsResult, StatementResult } from '@shared/types'
+import type { ConnectionDraft, PrivilegeLevel, RowsResult, StatementResult } from '@shared/types'
+import { privilegeChangesSql } from '@shared/sql/admin'
 import { buildAlterTable, detailsToDefinition } from '@shared/sql/ddl'
 import { SessionManager, type DbSession } from '../../src/main/db/session'
 import { runScript, runStatement } from '../../src/main/db/query'
@@ -396,26 +397,36 @@ describe.each(SERVERS)('$name', ({ port }) => {
       expect((await admin.status(session.pool)).some((v) => v.name === 'Uptime')).toBe(true)
     })
 
-    it('manages users and privileges', async () => {
+    it('manages users and edits their privileges level by level', async () => {
       await admin.createUser(session.pool, 'mcg_user', '%', 'p@ss')
-      await admin.grant(session.pool, {
-        sessionId: '',
-        user: 'mcg_user',
-        host: '%',
-        level: { kind: 'database', database: DB },
-        privileges: ['SELECT', 'INSERT'],
-        withGrantOption: false
+      const level = { kind: 'database', database: DB } as const
+      const apply = async (desired: { privileges: string[]; grantOption: boolean }, target: PrivilegeLevel = level): Promise<void> => {
+        const current = await admin.privileges(session.pool, 'mcg_user', '%', target)
+        for (const sql of privilegeChangesSql('mcg_user', '%', target, current, desired)) await session.pool.query(sql)
+      }
+
+      expect(await admin.privileges(session.pool, 'mcg_user', '%', level)).toEqual({ privileges: [], grantOption: false })
+      await apply({ privileges: ['SELECT', 'INSERT', 'UPDATE'], grantOption: false })
+      expect((await admin.privileges(session.pool, 'mcg_user', '%', level)).privileges.sort()).toEqual(['INSERT', 'SELECT', 'UPDATE'])
+
+      // Unchecking INSERT and checking DELETE plus GRANT OPTION.
+      await apply({ privileges: ['SELECT', 'UPDATE', 'DELETE'], grantOption: true })
+      expect(await admin.privileges(session.pool, 'mcg_user', '%', level)).toEqual({
+        privileges: expect.arrayContaining(['SELECT', 'UPDATE', 'DELETE']),
+        grantOption: true
       })
-      expect((await admin.grants(session.pool, 'mcg_user', '%')).join('\n')).toMatch(/GRANT SELECT, INSERT ON `mcg_test`\.\*/)
-      await admin.revoke(session.pool, {
-        sessionId: '',
-        user: 'mcg_user',
-        host: '%',
-        level: { kind: 'database', database: DB },
-        privileges: ['INSERT'],
-        withGrantOption: false
-      })
-      expect((await admin.grants(session.pool, 'mcg_user', '%')).join('\n')).not.toMatch(/INSERT/)
+      expect((await admin.privileges(session.pool, 'mcg_user', '%', level)).privileges).not.toContain('INSERT')
+
+      await apply({ privileges: ['SELECT'], grantOption: false }, { kind: 'table', database: DB, table: 'accounts' })
+      expect(await admin.privilegeLevels(session.pool, 'mcg_user', '%')).toEqual([
+        { kind: 'database', database: DB },
+        { kind: 'table', database: DB, table: 'accounts' }
+      ])
+
+      // Unchecking everything removes the level.
+      await apply({ privileges: [], grantOption: false })
+      expect(await admin.privilegeLevels(session.pool, 'mcg_user', '%')).toEqual([{ kind: 'table', database: DB, table: 'accounts' }])
+      expect((await admin.grants(session.pool, 'mcg_user', '%')).join('\n')).toMatch(/GRANT SELECT ON `mcg_test`\.`accounts`/)
       expect((await admin.users(session.pool)).some((u) => u.user === 'mcg_user')).toBe(true)
       await admin.dropUser(session.pool, 'mcg_user', '%')
     })

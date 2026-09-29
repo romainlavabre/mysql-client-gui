@@ -504,13 +504,10 @@ export interface UserAccount {
 
 export type PrivilegeLevel = { kind: 'global' } | { kind: 'database'; database: string } | { kind: 'table'; database: string; table: string }
 
-export interface GrantRequest {
-  sessionId: string
-  user: string
-  host: string
-  level: PrivilegeLevel
+/** Privileges of an account at one level. */
+export interface PrivilegeSet {
   privileges: string[]
-  withGrantOption: boolean
+  grantOption: boolean
 }
 
 export type MaintenanceOp = 'ANALYZE' | 'OPTIMIZE' | 'CHECK' | 'REPAIR'

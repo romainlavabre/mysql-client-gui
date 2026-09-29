@@ -89,14 +89,6 @@ const privilegeLevel = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('table'), database, table })
 ])
 
-const grantRequest = z.object({
-  sessionId,
-  user: z.string().max(200),
-  host: z.string().max(255),
-  level: privilegeLevel,
-  privileges: z.array(z.string().max(50)).max(50),
-  withGrantOption: z.boolean()
-})
 
 const fileFilters = z.array(z.object({ name: z.string().max(100), extensions: z.array(z.string().max(20)).max(20) })).max(20).optional()
 
@@ -224,8 +216,8 @@ export const schemas: Schemas = {
     createUser: z.object({ sessionId, user: z.string().max(200), host: z.string().max(255), password: z.string().max(1000) }),
     dropUser: z.object({ sessionId, user: z.string().max(200), host: z.string().max(255) }),
     setPassword: z.object({ sessionId, user: z.string().max(200), host: z.string().max(255), password: z.string().max(1000) }),
-    grant: grantRequest,
-    revoke: grantRequest,
+    privileges: z.object({ sessionId, user: z.string().max(200), host: z.string().max(255), level: privilegeLevel }),
+    privilegeLevels: z.object({ sessionId, user: z.string().max(200), host: z.string().max(255) }),
     maintenance: z.object({ sessionId, database, tables: z.array(table).max(100_000), op: z.enum(['ANALYZE', 'OPTIMIZE', 'CHECK', 'REPAIR']) })
   },
   dialog: {

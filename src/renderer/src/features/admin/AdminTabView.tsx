@@ -2,9 +2,9 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import clsx from 'clsx'
 import { KeyRound, Plus, RefreshCw, Search, ShieldCheck, Skull, Trash2, XOctagon } from 'lucide-react'
-import { useMemo, useState } from 'react'
-import type { PrivilegeLevel, UserAccount } from '@shared/types'
-import { PRIVILEGES } from '@shared/sql/admin'
+import { useEffect, useMemo, useState } from 'react'
+import type { PrivilegeLevel, PrivilegeSet, UserAccount } from '@shared/types'
+import { PRIVILEGES_BY_LEVEL, privilegeChangesSql, privilegesForLevel } from '@shared/sql/admin'
 import { api, errorMessage } from '../../lib/bridge'
 import { runStatements } from '../../lib/actions'
 import { confirm, prompt, toast } from '../../components/feedback'
@@ -241,7 +241,7 @@ function Users() {
   const queryClient = useQueryClient()
   const [selected, setSelected] = useState<UserAccount | null>(null)
   const [creating, setCreating] = useState(false)
-  const [granting, setGranting] = useState<'grant' | 'revoke' | null>(null)
+  const [editingPrivileges, setEditingPrivileges] = useState(false)
   const { data: users, error, isLoading } = useQuery({ queryKey: ['users', sessionId], queryFn: () => api.admin.users({ sessionId }) })
   const { data: grants, refetch: refetchGrants } = useQuery({
     queryKey: ['grants', sessionId, selected?.user, selected?.host],
@@ -318,11 +318,8 @@ function Users() {
                 {selected.user}@{selected.host}
               </span>
               <div className="flex-1" />
-              <Button size="sm" icon={<ShieldCheck className="size-3.5" />} onClick={() => setGranting('grant')}>
-                Grant
-              </Button>
-              <Button size="sm" onClick={() => setGranting('revoke')}>
-                Revoke
+              <Button size="sm" icon={<ShieldCheck className="size-3.5" />} onClick={() => setEditingPrivileges(true)}>
+                Privileges
               </Button>
               <Button size="sm" icon={<KeyRound className="size-3.5" />} onClick={() => void setPassword()}>
                 Password
@@ -342,8 +339,8 @@ function Users() {
         )}
       </div>
       <CreateUserDialog open={creating} onOpenChange={setCreating} onCreated={refresh} />
-      {selected && granting && (
-        <GrantDialog user={selected} mode={granting} open onOpenChange={(o) => !o && setGranting(null)} onDone={refresh} />
+      {selected && editingPrivileges && (
+        <PrivilegesDialog key={`${selected.user}@${selected.host}`} user={selected} onClose={() => setEditingPrivileges(false)} onChanged={refresh} />
       )}
     </div>
   )
@@ -400,80 +397,154 @@ function CreateUserDialog({ open, onOpenChange, onCreated }: { open: boolean; on
   )
 }
 
-function GrantDialog({
-  user,
-  mode,
-  open,
-  onOpenChange,
-  onDone
-}: {
-  user: UserAccount
-  mode: 'grant' | 'revoke'
-  open: boolean
-  onOpenChange: (o: boolean) => void
-  onDone: () => void
-}) {
+function levelKey(level: PrivilegeLevel): string {
+  return level.kind === 'global' ? '*.*' : level.kind === 'database' ? `${level.database}.*` : `${level.database}.${level.table}`
+}
+
+/**
+ * Edits the privileges of an account at one level: the current ones are
+ * pre-checked, and saving runs the GRANT / REVOKE statements of the difference.
+ */
+function PrivilegesDialog({ user, onClose, onChanged }: { user: UserAccount; onClose: () => void; onChanged: () => void }) {
   const sessionId = useSessionId()
-  const [levelKind, setLevelKind] = useState<PrivilegeLevel['kind']>('database')
-  const [database, setDatabase] = useState('')
-  const [table, setTable] = useState('')
-  const [privileges, setPrivileges] = useState<Set<string>>(new Set(['SELECT']))
-  const [withGrantOption, setWithGrantOption] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const queryClient = useQueryClient()
+  const [level, setLevel] = useState<PrivilegeLevel | null>(null)
+  const [desired, setDesired] = useState<PrivilegeSet | null>(null)
+  const [applying, setApplying] = useState(false)
+
+  const { data: levels } = useQuery({
+    queryKey: ['privilegeLevels', sessionId, user.user, user.host],
+    queryFn: () => api.admin.privilegeLevels({ sessionId, user: user.user, host: user.host }),
+    staleTime: 0
+  })
   const { data: databases } = useQuery({ queryKey: ['databases', sessionId], queryFn: () => api.schema.databases({ sessionId }) })
+  const levelDatabase = level && level.kind !== 'global' ? level.database : ''
+  const { data: objects } = useQuery({
+    queryKey: ['objects', sessionId, levelDatabase],
+    queryFn: () => api.schema.objects({ sessionId, database: levelDatabase }),
+    enabled: !!levelDatabase
+  })
+  const complete = !!level && (level.kind === 'global' || (!!level.database && (level.kind === 'database' || !!level.table)))
+  const { data: current, error, isFetching } = useQuery({
+    queryKey: ['privileges', sessionId, user.user, user.host, level],
+    queryFn: () => api.admin.privileges({ sessionId, user: user.user, host: user.host, level: level! }),
+    enabled: complete,
+    staleTime: 0,
+    gcTime: 0
+  })
 
-  const level: PrivilegeLevel =
-    levelKind === 'global' ? { kind: 'global' } : levelKind === 'database' ? { kind: 'database', database } : { kind: 'table', database, table }
+  // Start on the first level where the account already has privileges.
+  useEffect(() => {
+    if (!level && levels) setLevel(levels[0] ?? { kind: 'global' })
+  }, [levels, level])
 
-  const toggle = (p: string): void =>
-    setPrivileges((s) => {
-      const next = new Set(s)
-      if (next.has(p)) next.delete(p)
-      else next.add(p)
-      return next
-    })
+  // Pre-check what the account has at this level.
+  useEffect(() => {
+    setDesired(current ? { privileges: [...current.privileges], grantOption: current.grantOption } : null)
+  }, [current])
 
-  const submit = async (): Promise<void> => {
-    try {
-      const request = { sessionId, user: user.user, host: user.host, level, privileges: [...privileges], withGrantOption }
-      if (mode === 'grant') await api.admin.grant(request)
-      else await api.admin.revoke(request)
-      onDone()
-      onOpenChange(false)
-    } catch (e) {
-      setError(errorMessage(e))
+  const statements = useMemo(
+    () => (level && complete && current && desired ? privilegeChangesSql(user.user, user.host, level, current, desired) : []),
+    [level, complete, current, desired, user]
+  )
+
+  const changeLevel = async (next: PrivilegeLevel): Promise<void> => {
+    if (
+      statements.length > 0 &&
+      !(await confirm({ title: 'Unsaved changes', body: 'Discard the privilege changes of this level?', confirmLabel: 'Discard', danger: true }))
+    ) {
+      return
     }
+    setDesired(null)
+    setLevel(next)
   }
 
-  const valid = levelKind === 'global' || (database && (levelKind === 'database' || table))
+  const toggle = (privilege: string): void =>
+    setDesired((d) =>
+      d ? { ...d, privileges: d.privileges.includes(privilege) ? d.privileges.filter((p) => p !== privilege) : [...d.privileges, privilege] } : d
+    )
+
+  const apply = async (): Promise<void> => {
+    setApplying(true)
+    const done = await runStatements(statements, null, undefined, {
+      force: true,
+      title: `Privileges of ${user.user}@${user.host}`,
+      success: 'Privileges updated'
+    })
+    setApplying(false)
+    if (!done) return
+    onChanged()
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ['privileges', sessionId, user.user, user.host] }),
+      queryClient.invalidateQueries({ queryKey: ['privilegeLevels', sessionId, user.user, user.host] })
+    ])
+  }
+
+  const groups = level ? PRIVILEGES_BY_LEVEL[level.kind] : []
+  const had = new Set(current?.privileges ?? [])
+  const managed = level ? new Set(privilegesForLevel(level.kind)) : new Set<string>()
+  // Privileges the account has here that this editor does not manage (dynamic privileges...).
+  const unmanaged = (current?.privileges ?? []).filter((p) => !managed.has(p))
 
   return (
     <Dialog
-      open={open}
-      onOpenChange={onOpenChange}
-      title={`${mode === 'grant' ? 'Grant to' : 'Revoke from'} ${user.user}@${user.host}`}
-      width={680}
+      open
+      onOpenChange={(open) => !open && onClose()}
+      title={`Privileges of ${user.user}@${user.host}`}
+      width={760}
       footer={
         <>
-          <Button onClick={() => onOpenChange(false)}>Cancel</Button>
-          <Button variant={mode === 'grant' ? 'primary' : 'danger'} disabled={!valid} onClick={() => void submit()}>
-            {mode === 'grant' ? 'Grant' : 'Revoke'}
+          <span className="mr-auto self-center text-xs text-muted">
+            {statements.length === 0 ? 'No change' : `${statements.length} statement(s) to run`}
+          </span>
+          <Button onClick={onClose}>Close</Button>
+          <Button variant="primary" loading={applying} disabled={statements.length === 0} onClick={() => void apply()}>
+            Apply
           </Button>
         </>
       }
     >
       <div className="flex flex-col gap-4">
+        {levels && levels.length > 0 && (
+          <div className="flex flex-wrap items-center gap-1.5 text-xs">
+            <span className="text-muted">Has privileges on:</span>
+            {levels.map((l) => (
+              <button
+                key={levelKey(l)}
+                className={clsx(
+                  'rounded border px-2 py-0.5 font-mono text-[11px]',
+                  level && levelKey(level) === levelKey(l) ? 'border-accent text-accent' : 'border-border text-fg hover:bg-hover'
+                )}
+                onClick={() => void changeLevel(l)}
+              >
+                {levelKey(l)}
+              </button>
+            ))}
+          </div>
+        )}
         <div className="grid grid-cols-3 gap-3">
           <Field label="Level">
-            <Select value={levelKind} onChange={(e) => setLevelKind(e.target.value as PrivilegeLevel['kind'])}>
+            <Select
+              value={level?.kind ?? 'global'}
+              onChange={(e) => {
+                const kind = e.target.value as PrivilegeLevel['kind']
+                const database = level && level.kind !== 'global' ? level.database : ''
+                void changeLevel(kind === 'global' ? { kind } : kind === 'database' ? { kind, database } : { kind, database, table: '' })
+              }}
+            >
               <option value="global">Global (*.*)</option>
               <option value="database">Database</option>
               <option value="table">Table</option>
             </Select>
           </Field>
-          {levelKind !== 'global' && (
+          {level && level.kind !== 'global' && (
             <Field label="Database">
-              <Select value={database} onChange={(e) => setDatabase(e.target.value)}>
+              <Select
+                value={level.database}
+                onChange={(e) =>
+                  void changeLevel(level.kind === 'table' ? { kind: 'table', database: e.target.value, table: '' } : { kind: 'database', database: e.target.value })
+                }
+              >
                 <option value="">Select…</option>
                 {databases?.map((d) => (
                   <option key={d.name} value={d.name}>
@@ -483,36 +554,86 @@ function GrantDialog({
               </Select>
             </Field>
           )}
-          {levelKind === 'table' && (
+          {level?.kind === 'table' && (
             <Field label="Table">
-              <Input value={table} onChange={(e) => setTable(e.target.value)} />
+              <Select value={level.table} disabled={!level.database} onChange={(e) => void changeLevel({ ...level, table: e.target.value })}>
+                <option value="">Select…</option>
+                {objects?.tables.map((t) => (
+                  <option key={t.name} value={t.name}>
+                    {t.name}
+                  </option>
+                ))}
+              </Select>
             </Field>
           )}
         </div>
-        <div className="grid grid-cols-3 gap-4">
-          {Object.entries(PRIVILEGES).map(([group, list]) => (
-            <div key={group}>
-              <div className="mb-2 text-xs font-semibold capitalize text-muted">{group}</div>
-              <div className="flex flex-col gap-1.5 text-xs">
-                {list
-                  .filter((p) => p !== 'GRANT OPTION')
-                  .map((p) => (
-                    <Checkbox key={p} checked={privileges.has(p)} onChange={() => toggle(p)} label={p} />
-                  ))}
-              </div>
+
+        {!complete ? (
+          <div className="text-xs text-muted">Select the database{level?.kind === 'table' ? ' and the table' : ''}.</div>
+        ) : error ? (
+          <ErrorBox>{errorMessage(error)}</ErrorBox>
+        ) : !desired || isFetching ? (
+          <Spinner />
+        ) : (
+          <>
+            <div className="grid grid-cols-3 gap-4">
+              {groups
+                .filter((g) => g.privileges.length > 0)
+                .map((group) => (
+                  <div key={group.group}>
+                    <div className="mb-2 text-xs font-semibold text-muted">{group.group}</div>
+                    <div className="flex flex-col gap-1.5 text-xs">
+                      {group.privileges.map((p) => {
+                        const checked = desired.privileges.includes(p)
+                        const changed = checked !== had.has(p)
+                        return (
+                          <Checkbox
+                            key={p}
+                            checked={checked}
+                            onChange={() => toggle(p)}
+                            label={
+                              <span className={clsx(changed && (checked ? 'text-success' : 'text-danger line-through'))}>
+                                {p}
+                                {changed && <span className="ml-1 no-underline">{checked ? '(+)' : '(−)'}</span>}
+                              </span>
+                            }
+                          />
+                        )
+                      })}
+                    </div>
+                  </div>
+                ))}
             </div>
-          ))}
-        </div>
-        <div className="flex items-center gap-4 text-xs">
-          <Checkbox checked={withGrantOption} onChange={setWithGrantOption} label={mode === 'grant' ? 'WITH GRANT OPTION' : 'Also revoke GRANT OPTION'} />
-          <Button size="sm" variant="ghost" onClick={() => setPrivileges(new Set([...PRIVILEGES.data, ...PRIVILEGES.structure].filter((p) => p !== 'FILE')))}>
-            All data & structure
-          </Button>
-          <Button size="sm" variant="ghost" onClick={() => setPrivileges(new Set())}>
-            None
-          </Button>
-        </div>
-        {error && <ErrorBox>{error}</ErrorBox>}
+            <div className="flex flex-wrap items-center gap-4 text-xs">
+              <Checkbox
+                checked={desired.grantOption}
+                onChange={(grantOption) => setDesired({ ...desired, grantOption })}
+                label={
+                  <span className={clsx(desired.grantOption !== current?.grantOption && (desired.grantOption ? 'text-success' : 'text-danger line-through'))}>
+                    GRANT OPTION (can give its privileges to others)
+                  </span>
+                }
+              />
+              <Button size="sm" variant="ghost" onClick={() => setDesired({ ...desired, privileges: privilegesForLevel(level!.kind) })}>
+                All
+              </Button>
+              <Button size="sm" variant="ghost" onClick={() => setDesired({ ...desired, privileges: [] })}>
+                None
+              </Button>
+              {current && (
+                <Button size="sm" variant="ghost" disabled={statements.length === 0} onClick={() => setDesired({ ...current, privileges: [...current.privileges] })}>
+                  Reset
+                </Button>
+              )}
+            </div>
+            {unmanaged.length > 0 && (
+              <p className="text-[11px] text-muted">Also has, left untouched: {unmanaged.join(', ')}</p>
+            )}
+            {statements.length > 0 && (
+              <pre className="selectable max-h-32 overflow-auto rounded bg-bg p-2 font-mono text-[11px] text-muted">{statements.join(';\n')};</pre>
+            )}
+          </>
+        )}
       </div>
     </Dialog>
   )
