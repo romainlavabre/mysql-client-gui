@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { quoteIdent, quoteValue } from '@shared/sql/quote'
 import { buildOrderBy, buildWhere } from '@shared/sql/filters'
 import { rowChangeToSql } from '@shared/sql/rowChanges'
-import { grantSql, privilegeChangesSql, revokeSql } from '@shared/sql/admin'
+import { grantSql, privilegeChangesSql, revokeSql, sameSslRequirement, sslRequireSql } from '@shared/sql/admin'
 import { isDestructive, isUnboundedWrite, isWriteStatement } from '@shared/sql/classify'
 
 describe('quoting', () => {
@@ -92,6 +92,19 @@ describe('privileges', () => {
   })
   it('rejects injected privileges', () => {
     expect(() => grantSql('a', '%', { kind: 'global' }, ['SELECT; DROP'], false)).toThrow()
+  })
+  it('builds the SSL requirement of an account', () => {
+    const none = { type: 'none' as const, cipher: '', issuer: '', subject: '' }
+    expect(sslRequireSql('bob', '%', none)).toBe("ALTER USER 'bob'@'%' REQUIRE NONE")
+    expect(sslRequireSql('bob', '%', { ...none, type: 'ssl' })).toBe("ALTER USER 'bob'@'%' REQUIRE SSL")
+    expect(sslRequireSql('bob', '%', { ...none, type: 'x509' })).toBe("ALTER USER 'bob'@'%' REQUIRE X509")
+    expect(sslRequireSql('bob', '%', { type: 'specified', cipher: ' AES256-SHA ', issuer: '', subject: "/CN=o'brien" })).toBe(
+      "ALTER USER 'bob'@'%' REQUIRE CIPHER 'AES256-SHA' AND SUBJECT '/CN=o\\'brien'"
+    )
+    expect(() => sslRequireSql('bob', '%', { ...none, type: 'specified' })).toThrow()
+    // The fields only matter for SPECIFIED.
+    expect(sameSslRequirement({ ...none, type: 'ssl' }, { type: 'ssl', cipher: 'x', issuer: '', subject: '' })).toBe(true)
+    expect(sameSslRequirement({ ...none, type: 'specified', cipher: 'a' }, { ...none, type: 'specified', cipher: 'b' })).toBe(false)
   })
 })
 

@@ -118,16 +118,27 @@ export function Checkbox({
   checked,
   onChange,
   label,
-  disabled
+  disabled,
+  indeterminate = false
 }: {
   checked: boolean
   onChange: (checked: boolean) => void
   label: ReactNode
   disabled?: boolean
+  /** Partly checked: shown as a dash (for a box that checks a whole group). */
+  indeterminate?: boolean
 }) {
   return (
     <label className={clsx('inline-flex items-center gap-2 cursor-pointer', disabled && 'opacity-50 pointer-events-none')}>
-      <input type="checkbox" className="accent-[var(--accent)] size-3.5" checked={checked} onChange={(e) => onChange(e.target.checked)} />
+      <input
+        type="checkbox"
+        className="accent-[var(--accent)] size-3.5"
+        checked={checked}
+        ref={(input) => {
+          if (input) input.indeterminate = indeterminate
+        }}
+        onChange={(e) => onChange(e.target.checked)}
+      />
       <span>{label}</span>
     </label>
   )

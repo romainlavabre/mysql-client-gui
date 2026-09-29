@@ -1,6 +1,6 @@
 // Server administration: processes, variables, status, users and privileges.
 import type { Pool, RowDataPacket } from 'mysql2/promise'
-import type { MaintenanceOp, PrivilegeLevel, PrivilegeSet, ProcessInfo, StatementResult, UserAccount, VariableInfo } from '@shared/types'
+import type { MaintenanceOp, PrivilegeLevel, PrivilegeSet, ProcessInfo, SslRequirement, StatementResult, UserAccount, VariableInfo } from '@shared/types'
 import { account } from '@shared/sql/admin'
 import { qualified, quoteString } from '@shared/sql/quote'
 import { runStatement } from './query'
@@ -46,8 +46,21 @@ export async function users(pool: Pool): Promise<UserAccount[]> {
     user: String(r.User),
     host: String(r.Host),
     locked: String(r.account_locked ?? 'N') === 'Y',
-    passwordExpired: String(r.password_expired ?? 'N') === 'Y'
+    passwordExpired: String(r.password_expired ?? 'N') === 'Y',
+    ssl: sslRequirement(r)
   }))
+}
+
+/** ssl_type is '' | ANY | X509 | SPECIFIED; the other columns are blobs. */
+function sslRequirement(r: Row): SslRequirement {
+  const text = (value: unknown): string => (value === null || value === undefined ? '' : Buffer.isBuffer(value) ? value.toString('utf8') : String(value))
+  const type = text(r.ssl_type).toUpperCase()
+  return {
+    type: type === 'ANY' ? 'ssl' : type === 'X509' ? 'x509' : type === 'SPECIFIED' ? 'specified' : 'none',
+    cipher: text(r.ssl_cipher),
+    issuer: text(r.x509_issuer),
+    subject: text(r.x509_subject)
+  }
 }
 
 export async function grants(pool: Pool, user: string, host: string): Promise<string[]> {

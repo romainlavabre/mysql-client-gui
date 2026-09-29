@@ -3,8 +3,8 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import clsx from 'clsx'
 import { KeyRound, Plus, RefreshCw, Search, ShieldCheck, Skull, Trash2, XOctagon } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
-import type { PrivilegeLevel, PrivilegeSet, UserAccount } from '@shared/types'
-import { PRIVILEGES_BY_LEVEL, privilegeChangesSql, privilegesForLevel } from '@shared/sql/admin'
+import type { PrivilegeLevel, PrivilegeSet, SslRequirement, UserAccount } from '@shared/types'
+import { PRIVILEGES_BY_LEVEL, privilegeChangesSql, privilegesForLevel, sameSslRequirement, sslRequireSql } from '@shared/sql/admin'
 import { api, errorMessage } from '../../lib/bridge'
 import { runStatements } from '../../lib/actions'
 import { confirm, prompt, toast } from '../../components/feedback'
@@ -250,6 +250,9 @@ function Users() {
     staleTime: 0
   })
 
+  // The selected account as last loaded, so its details follow the changes.
+  const selectedAccount = selected && (users?.find((u) => u.user === selected.user && u.host === selected.host) ?? selected)
+
   const refresh = (): void => {
     void queryClient.invalidateQueries({ queryKey: ['users', sessionId] })
     void refetchGrants()
@@ -317,6 +320,11 @@ function Users() {
               <span className="font-mono text-sm">
                 {selected.user}@{selected.host}
               </span>
+              {selectedAccount && selectedAccount.ssl.type !== 'none' && (
+                <span className="rounded border border-border px-1.5 py-0.5 text-[10px] text-muted">
+                  {selectedAccount.ssl.type === 'ssl' ? 'SSL required' : selectedAccount.ssl.type === 'x509' ? 'X509 required' : 'SSL: specified'}
+                </span>
+              )}
               <div className="flex-1" />
               <Button size="sm" icon={<ShieldCheck className="size-3.5" />} onClick={() => setEditingPrivileges(true)}>
                 Privileges
@@ -339,8 +347,8 @@ function Users() {
         )}
       </div>
       <CreateUserDialog open={creating} onOpenChange={setCreating} onCreated={refresh} />
-      {selected && editingPrivileges && (
-        <PrivilegesDialog key={`${selected.user}@${selected.host}`} user={selected} onClose={() => setEditingPrivileges(false)} onChanged={refresh} />
+      {selectedAccount && editingPrivileges && (
+        <PrivilegesDialog key={`${selectedAccount.user}@${selectedAccount.host}`} user={selectedAccount} onClose={() => setEditingPrivileges(false)} onChanged={refresh} />
       )}
     </div>
   )
@@ -443,10 +451,23 @@ function PrivilegesDialog({ user, onClose, onChanged }: { user: UserAccount; onC
     setDesired(current ? { privileges: [...current.privileges], grantOption: current.grantOption } : null)
   }, [current])
 
-  const statements = useMemo(
-    () => (level && complete && current && desired ? privilegeChangesSql(user.user, user.host, level, current, desired) : []),
-    [level, complete, current, desired, user]
-  )
+  // The SSL requirement belongs to the account, whatever the level shown.
+  const [ssl, setSsl] = useState<SslRequirement>(user.ssl)
+  const sslKey = JSON.stringify(user.ssl)
+  useEffect(() => setSsl(JSON.parse(sslKey) as SslRequirement), [sslKey])
+  const sslChanged = !sameSslRequirement(ssl, user.ssl)
+
+  const { statements, invalid } = useMemo(() => {
+    const list = level && complete && current && desired ? privilegeChangesSql(user.user, user.host, level, current, desired) : []
+    if (!sameSslRequirement(ssl, user.ssl)) {
+      try {
+        list.push(sslRequireSql(user.user, user.host, ssl))
+      } catch (e) {
+        return { statements: list, invalid: errorMessage(e) }
+      }
+    }
+    return { statements: list, invalid: null }
+  }, [level, complete, current, desired, user, ssl])
 
   const changeLevel = async (next: PrivilegeLevel): Promise<void> => {
     if (
@@ -464,6 +485,11 @@ function PrivilegesDialog({ user, onClose, onChanged }: { user: UserAccount; onC
       d ? { ...d, privileges: d.privileges.includes(privilege) ? d.privileges.filter((p) => p !== privilege) : [...d.privileges, privilege] } : d
     )
 
+  const toggleGroup = (privileges: string[], on: boolean): void =>
+    setDesired((d) =>
+      d ? { ...d, privileges: on ? [...new Set([...d.privileges, ...privileges])] : d.privileges.filter((p) => !privileges.includes(p)) } : d
+    )
+
   const apply = async (): Promise<void> => {
     setApplying(true)
     const done = await runStatements(statements, null, undefined, {
@@ -475,6 +501,7 @@ function PrivilegesDialog({ user, onClose, onChanged }: { user: UserAccount; onC
     if (!done) return
     onChanged()
     await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ['users', sessionId] }),
       queryClient.invalidateQueries({ queryKey: ['privileges', sessionId, user.user, user.host] }),
       queryClient.invalidateQueries({ queryKey: ['privilegeLevels', sessionId, user.user, user.host] })
     ])
@@ -498,7 +525,7 @@ function PrivilegesDialog({ user, onClose, onChanged }: { user: UserAccount; onC
             {statements.length === 0 ? 'No change' : `${statements.length} statement(s) to run`}
           </span>
           <Button onClick={onClose}>Close</Button>
-          <Button variant="primary" loading={applying} disabled={statements.length === 0} onClick={() => void apply()}>
+          <Button variant="primary" loading={applying} disabled={statements.length === 0 || !!invalid} onClick={() => void apply()}>
             Apply
           </Button>
         </>
@@ -581,7 +608,16 @@ function PrivilegesDialog({ user, onClose, onChanged }: { user: UserAccount; onC
                 .filter((g) => g.privileges.length > 0)
                 .map((group) => (
                   <div key={group.group}>
-                    <div className="mb-2 text-xs font-semibold text-muted">{group.group}</div>
+                    <div className="mb-2 text-xs font-semibold text-muted">
+                      <Checkbox
+                        checked={group.privileges.every((p) => desired.privileges.includes(p))}
+                        indeterminate={
+                          group.privileges.some((p) => desired.privileges.includes(p)) && !group.privileges.every((p) => desired.privileges.includes(p))
+                        }
+                        onChange={(on) => toggleGroup(group.privileges, on)}
+                        label={group.group}
+                      />
+                    </div>
                     <div className="flex flex-col gap-1.5 text-xs">
                       {group.privileges.map((p) => {
                         const checked = desired.privileges.includes(p)
@@ -629,12 +665,66 @@ function PrivilegesDialog({ user, onClose, onChanged }: { user: UserAccount; onC
             {unmanaged.length > 0 && (
               <p className="text-[11px] text-muted">Also has, left untouched: {unmanaged.join(', ')}</p>
             )}
-            {statements.length > 0 && (
-              <pre className="selectable max-h-32 overflow-auto rounded bg-bg p-2 font-mono text-[11px] text-muted">{statements.join(';\n')};</pre>
-            )}
           </>
+        )}
+
+        <SslSection value={ssl} onChange={setSsl} changed={sslChanged} />
+
+        {invalid && <ErrorBox>{invalid}</ErrorBox>}
+        {statements.length > 0 && (
+          <pre className="selectable max-h-32 overflow-auto rounded bg-bg p-2 font-mono text-[11px] text-muted">{statements.join(';\n')};</pre>
         )}
       </div>
     </Dialog>
+  )
+}
+
+const SSL_OPTIONS: { value: SslRequirement['type']; label: string; description: string }[] = [
+  { value: 'none', label: 'REQUIRE NONE', description: 'Does not require SSL-encrypted connections.' },
+  { value: 'ssl', label: 'REQUIRE SSL', description: 'Requires SSL-encrypted connections.' },
+  { value: 'x509', label: 'REQUIRE X509', description: 'Requires a valid X509 client certificate.' },
+  { value: 'specified', label: 'SPECIFIED', description: 'Requires the cipher, issuer and / or subject below.' }
+]
+
+/** Connection requirement of the account (REQUIRE clause), as in phpMyAdmin. */
+function SslSection({ value, onChange, changed }: { value: SslRequirement; onChange: (ssl: SslRequirement) => void; changed: boolean }) {
+  return (
+    <div className="border-t border-border pt-3">
+      <div className="mb-2 flex items-center gap-2 text-xs font-semibold text-muted">
+        SSL
+        <span className="font-normal">(whole account, not only this level)</span>
+        {changed && <span className="font-normal text-success">modified</span>}
+      </div>
+      <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-xs">
+        {SSL_OPTIONS.map((option) => (
+          <label key={option.value} className="flex cursor-pointer items-start gap-2">
+            <input
+              type="radio"
+              name="ssl-requirement"
+              className="mt-0.5 accent-[var(--accent)]"
+              checked={value.type === option.value}
+              onChange={() => onChange({ ...value, type: option.value })}
+            />
+            <span>
+              <span className="font-mono">{option.label}</span>
+              <span className="block text-[11px] text-muted">{option.description}</span>
+            </span>
+          </label>
+        ))}
+      </div>
+      {value.type === 'specified' && (
+        <div className="mt-3 grid grid-cols-3 gap-3">
+          <Field label="REQUIRE CIPHER" hint="e.g. ECDHE-RSA-AES256-GCM-SHA384">
+            <Input value={value.cipher} onChange={(e) => onChange({ ...value, cipher: e.target.value })} />
+          </Field>
+          <Field label="REQUIRE ISSUER" hint="e.g. /C=FR/O=Company/CN=CA">
+            <Input value={value.issuer} onChange={(e) => onChange({ ...value, issuer: e.target.value })} />
+          </Field>
+          <Field label="REQUIRE SUBJECT" hint="e.g. /C=FR/O=Company/CN=client">
+            <Input value={value.subject} onChange={(e) => onChange({ ...value, subject: e.target.value })} />
+          </Field>
+        </div>
+      )}
+    </div>
   )
 }

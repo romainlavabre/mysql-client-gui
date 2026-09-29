@@ -502,6 +502,16 @@ export interface UserAccount {
   host: string
   locked: boolean
   passwordExpired: boolean
+  ssl: SslRequirement
+}
+
+/** REQUIRE clause of an account: how it must connect. */
+export interface SslRequirement {
+  /** none: any connection; ssl: encrypted; x509: encrypted with a valid client certificate; specified: see the fields. */
+  type: 'none' | 'ssl' | 'x509' | 'specified'
+  cipher: string
+  issuer: string
+  subject: string
 }
 
 export type PrivilegeLevel = { kind: 'global' } | { kind: 'database'; database: string } | { kind: 'table'; database: string; table: string }

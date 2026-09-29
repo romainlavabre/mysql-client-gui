@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import type { ConnectionDraft, PrivilegeLevel, RowsResult, StatementResult } from '@shared/types'
-import { privilegeChangesSql } from '@shared/sql/admin'
+import { privilegeChangesSql, sslRequireSql } from '@shared/sql/admin'
 import { buildAlterTable, detailsToDefinition } from '@shared/sql/ddl'
 import { SessionManager, type DbSession } from '../../src/main/db/session'
 import { runScript, runStatement } from '../../src/main/db/query'
@@ -428,6 +428,18 @@ describe.each(SERVERS)('$name', ({ port }) => {
       expect(await admin.privilegeLevels(session.pool, 'mcg_user', '%')).toEqual([{ kind: 'table', database: DB, table: 'accounts' }])
       expect((await admin.grants(session.pool, 'mcg_user', '%')).join('\n')).toMatch(/GRANT SELECT ON `mcg_test`\.`accounts`/)
       expect((await admin.users(session.pool)).some((u) => u.user === 'mcg_user')).toBe(true)
+
+      // SSL requirement, read back from mysql.user.
+      const ssl = async (): Promise<unknown> => (await admin.users(session.pool)).find((u) => u.user === 'mcg_user')?.ssl
+      expect(await ssl()).toEqual({ type: 'none', cipher: '', issuer: '', subject: '' })
+      const none = { type: 'none' as const, cipher: '', issuer: '', subject: '' }
+      await session.pool.query(sslRequireSql('mcg_user', '%', { ...none, type: 'x509' }))
+      expect(await ssl()).toMatchObject({ type: 'x509' })
+      const specified = { type: 'specified' as const, cipher: 'ECDHE-RSA-AES256-GCM-SHA384', issuer: '/C=FR/CN=CA', subject: '/C=FR/CN=client' }
+      await session.pool.query(sslRequireSql('mcg_user', '%', specified))
+      expect(await ssl()).toEqual(specified)
+      await session.pool.query(sslRequireSql('mcg_user', '%', none))
+      expect(await ssl()).toMatchObject({ type: 'none' })
       await admin.dropUser(session.pool, 'mcg_user', '%')
     })
 

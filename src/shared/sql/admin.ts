@@ -1,5 +1,5 @@
 // SQL for user and privilege management.
-import type { PrivilegeLevel, PrivilegeSet } from '../types'
+import type { PrivilegeLevel, PrivilegeSet, SslRequirement } from '../types'
 import { quoteIdent, quoteString } from './quote'
 
 export const PRIVILEGES = {
@@ -80,6 +80,37 @@ export function privilegeChangesSql(
   if (added.length > 0) statements.push(grantSql(user, host, level, added, addGrantOption))
   else if (addGrantOption) statements.push(grantSql(user, host, level, ['USAGE'], true))
   return statements
+}
+
+export function sameSslRequirement(a: SslRequirement, b: SslRequirement): boolean {
+  if (a.type !== b.type) return false
+  return a.type !== 'specified' || (a.cipher.trim() === b.cipher.trim() && a.issuer.trim() === b.issuer.trim() && a.subject.trim() === b.subject.trim())
+}
+
+/** ALTER USER … REQUIRE: the connection an account must use. */
+export function sslRequireSql(user: string, host: string, ssl: SslRequirement): string {
+  let clause: string
+  switch (ssl.type) {
+    case 'none':
+      clause = 'NONE'
+      break
+    case 'ssl':
+      clause = 'SSL'
+      break
+    case 'x509':
+      clause = 'X509'
+      break
+    case 'specified': {
+      const parts = [
+        ssl.cipher.trim() && `CIPHER ${quoteString(ssl.cipher.trim())}`,
+        ssl.issuer.trim() && `ISSUER ${quoteString(ssl.issuer.trim())}`,
+        ssl.subject.trim() && `SUBJECT ${quoteString(ssl.subject.trim())}`
+      ].filter(Boolean)
+      if (parts.length === 0) throw new Error('Give a cipher, an issuer or a subject')
+      clause = parts.join(' AND ')
+    }
+  }
+  return `ALTER USER ${account(user, host)} REQUIRE ${clause}`
 }
 
 export function account(user: string, host: string): string {

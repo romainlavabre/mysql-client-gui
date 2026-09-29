@@ -89,4 +89,27 @@ test('creates a workspace and a connection, runs a query and edits a row', async
   await page.locator('select').filter({ hasText: 'No database' }).selectOption('e2e_db')
   await expect(group('No database')).toHaveCount(0)
   await expect(group('e2e_db')).toContainText('2')
+
+  // Privileges: a whole group at once, and the SSL requirement of the account.
+  await page.getByLabel('Server').click()
+  await page.getByRole('button', { name: 'Users & privileges' }).click()
+  await page.getByRole('button', { name: 'User', exact: true }).click()
+  const createDialog = page.getByRole('dialog', { name: 'Create user' })
+  const user = `e2e_${Date.now()}` // the test server outlives a run
+  await createDialog.locator('input').first().fill(user)
+  await createDialog.getByRole('button', { name: 'Create', exact: true }).click()
+  await page.getByRole('button', { name: `${user} @%` }).click()
+  await page.getByRole('button', { name: 'Privileges', exact: true }).click()
+  const privileges = page.getByRole('dialog', { name: `Privileges of ${user}@%` })
+  await privileges.getByLabel('Data', { exact: true }).check()
+  await expect(privileges.getByLabel(/^FILE/)).toBeChecked()
+  await privileges.getByLabel(/^FILE/).uncheck()
+  expect(await privileges.getByLabel('Data', { exact: true }).evaluate((input: HTMLInputElement) => input.indeterminate)).toBe(true)
+  await privileges.getByLabel(/REQUIRE SSL/).check()
+  await expect(privileges.locator('pre')).toContainText(`ALTER USER '${user}'@'%' REQUIRE SSL`)
+  await page.screenshot({ path: 'test-results/privileges.png' })
+  await privileges.getByRole('button', { name: 'Apply' }).click()
+  await page.getByRole('button', { name: 'Run', exact: true }).click()
+  await expect(page.getByText('SSL required')).toBeVisible()
+  await expect(privileges.locator('pre')).toHaveCount(0) // nothing left to apply
 })
