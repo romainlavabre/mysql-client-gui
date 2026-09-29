@@ -154,29 +154,41 @@ export function setRowLimit(rowLimit: number): void {
   useApp.setState({ rowLimit })
 }
 
+/**
+ * Connects to a connection. When already connected elsewhere, the new session
+ * is opened first and the old one closed only once it succeeded, so a failed
+ * switch leaves the current connection untouched. Query tabs are saved per
+ * connection and restored.
+ */
 export async function connect(connection: ConnectionConfig, repoId: string | null): Promise<void> {
-  const current = useApp.getState().session
-  if (current?.connection.id === connection.id) return
-  if (current) await disconnect()
+  const previous = useApp.getState().session
+  if (previous?.connection.id === connection.id) return
   useApp.setState({ connecting: connection.id })
+  let info: SessionInfo
   try {
-    const info = await api.sessions.open({ connectionId: connection.id })
-    const database = connection.defaultDatabase || null
-    const restored = restoreTabs(connection.id, database)
-    const tabs: Tab[] = restored.length > 0 ? restored : [emptyQueryTab(database, 1)]
-    useApp.setState({
-      session: { info, connection },
-      sessionRepoId: repoId,
-      connecting: null,
-      currentDatabase: database,
-      tabs,
-      activeTabId: tabs[0].id,
-      sidebarView: 'explorer'
-    })
+    info = await api.sessions.open({ connectionId: connection.id })
   } catch (error) {
     useApp.setState({ connecting: null })
     toast(`Could not connect to ${connection.name}:\n${errorMessage(error)}`, 'error')
+    return
   }
+  if (previous) {
+    persistTabs()
+    void api.sessions.close({ sessionId: previous.info.sessionId }).catch(() => undefined)
+  }
+  const database = connection.defaultDatabase || null
+  const restored = restoreTabs(connection.id, database)
+  const tabs: Tab[] = restored.length > 0 ? restored : [emptyQueryTab(database, 1)]
+  useApp.setState({
+    session: { info, connection },
+    sessionRepoId: repoId,
+    connecting: null,
+    currentDatabase: database,
+    tabs,
+    activeTabId: tabs[0].id,
+    // Keep the sidebar view when switching; show the explorer on a fresh connection.
+    sidebarView: previous ? useApp.getState().sidebarView : 'explorer'
+  })
 }
 
 export async function disconnect(): Promise<void> {

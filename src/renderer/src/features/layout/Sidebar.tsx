@@ -1,5 +1,5 @@
 // Left panel: workspace switcher, then connections or the active connection's views.
-import { FolderGit2, Plug, Unplug } from 'lucide-react'
+import { FolderGit2, Unplug } from 'lucide-react'
 import { useState } from 'react'
 import { Button, EmptyState, IconButton } from '../../components/ui'
 import { disconnect, useApp } from '../../store'
@@ -7,6 +7,7 @@ import { WorkspaceSwitcher } from '../workspace/WorkspaceSwitcher'
 import { AddWorkspaceDialog } from '../workspace/AddWorkspaceDialog'
 import { useWorkspace } from '../workspace/useWorkspace'
 import { ConnectionList } from '../connections/ConnectionList'
+import { ConnectionSwitcher } from '../connections/ConnectionSwitcher'
 import { Explorer } from '../explorer/Explorer'
 import { SavedQueries } from '../saved/SavedQueries'
 import { HistoryPanel } from '../saved/HistoryPanel'
@@ -34,21 +35,16 @@ export function Sidebar() {
       ) : (
         <>
           <div
-            className="flex items-center gap-2 border-b border-border px-3 py-2"
+            className="flex items-center gap-1 border-b border-border px-2 py-1.5"
             style={{ boxShadow: `inset 3px 0 0 ${session.connection.color || ENV_COLORS[session.connection.env]}` }}
           >
-            <Plug className="size-3.5 shrink-0 text-success" />
-            <div className="min-w-0 flex-1">
-              <div className="truncate text-[13px] font-medium">{session.connection.name}</div>
-              <div className="truncate text-[11px] text-muted">
-                {session.info.currentUser} · {session.info.serverVersion}
-              </div>
-            </div>
+            <ConnectionSwitcher />
             <IconButton label="Disconnect" onClick={() => void disconnect()}>
               <Unplug className="size-4" />
             </IconButton>
           </div>
-          <div className="min-h-0 flex-1">
+          {/* Keyed by session: switching connection starts from a fresh tree. */}
+          <div className="min-h-0 flex-1" key={session.info.sessionId}>
             {view === 'explorer' && <Explorer />}
             {view === 'saved' && <SavedQueries />}
             {view === 'history' && <HistoryPanel />}
