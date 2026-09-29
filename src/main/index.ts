@@ -3,6 +3,7 @@ import { join } from 'node:path'
 import { app, BrowserWindow, ipcMain, Menu, safeStorage, shell } from 'electron'
 import { API_METHODS, type Api, type ApiEvents } from '@shared/api'
 import { SecretStore, createCipher } from './secrets'
+import { LEGACY_NAME, migrateLegacyDataDir } from './legacy'
 import { WorkspaceManager } from './workspace/manager'
 import { SessionManager } from './db/session'
 import { HistoryStore } from './history'
@@ -10,9 +11,10 @@ import { JobRunner } from './db/io'
 import { createHandlers } from './ipc/handlers'
 import { schemas } from './ipc/schemas'
 
-// Keeps the data folder name stable (~/.config/mysql-client-gui) whatever the product name.
-app.setName('mysql-client-gui')
-if (process.env.MYSQL_CLIENT_GUI_DATA_DIR) app.setPath('userData', process.env.MYSQL_CLIENT_GUI_DATA_DIR)
+// Keeps the data folder name stable (~/.config/simone) whatever the product name.
+app.setName('simone')
+if (process.env.SIMONE_DATA_DIR) app.setPath('userData', process.env.SIMONE_DATA_DIR)
+else migrateLegacyDataDir(join(app.getPath('appData'), LEGACY_NAME), app.getPath('userData'))
 
 // Launched from a snap's terminal (JetBrains IDEs, VS Code…), SNAP_NAME is
 // inherited: libsecret then believes it runs confined and stores the keyring
@@ -42,7 +44,7 @@ function createWindow(): void {
     minWidth: 900,
     minHeight: 600,
     show: false,
-    title: 'MySQL Client GUI',
+    title: 'Simone',
     backgroundColor: '#16181d',
     autoHideMenuBar: true,
     icon: join(app.getAppPath(), 'build/icon.png'),

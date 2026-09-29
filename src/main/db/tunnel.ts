@@ -45,7 +45,7 @@ function askPassScript(dataDir: string): string {
   const path = join(dataDir, 'ssh-askpass.sh')
   if (!existsSync(path)) {
     mkdirSync(dataDir, { recursive: true })
-    writeFileSync(path, '#!/bin/sh\nprintf "%s\\n" "$MYSQL_CLIENT_GUI_SSH_SECRET"\n')
+    writeFileSync(path, '#!/bin/sh\nprintf "%s\\n" "$SIMONE_SSH_SECRET"\n')
     chmodSync(path, 0o700)
   }
   return path
@@ -84,7 +84,7 @@ export async function openTunnel(
     env.SSH_ASKPASS = askPassScript(dataDir)
     env.SSH_ASKPASS_REQUIRE = 'force'
     env.DISPLAY = env.DISPLAY || ':0'
-    env.MYSQL_CLIENT_GUI_SSH_SECRET = secret
+    env.SIMONE_SSH_SECRET = secret
   }
   const child: ChildProcess = spawn('ssh', sshArgs(config, localPort, targetHost, targetPort, interactive), {
     env,

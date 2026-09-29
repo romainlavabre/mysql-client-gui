@@ -15,7 +15,7 @@ test.beforeAll(async () => {
   dataDir = mkdtempSync(join(tmpdir(), 'mcg-e2e-'))
   app = await electron.launch({
     args: ['.'],
-    env: { ...process.env, MYSQL_CLIENT_GUI_DATA_DIR: dataDir, GIT_AUTHOR_NAME: 'E2E', GIT_AUTHOR_EMAIL: 'e2e@example.com' }
+    env: { ...process.env, SIMONE_DATA_DIR: dataDir, GIT_AUTHOR_NAME: 'E2E', GIT_AUTHOR_EMAIL: 'e2e@example.com' }
   })
   page = await app.firstWindow()
 })

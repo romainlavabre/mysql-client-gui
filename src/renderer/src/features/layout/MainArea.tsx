@@ -270,7 +270,7 @@ export function MainArea() {
   if (!session) {
     if (editing) return <ConnectionForm key={editing} connectionId={editing} />
     return (
-      <EmptyState icon={<Database className="size-12" />} title="MySQL Client GUI">
+      <EmptyState icon={<Database className="size-12" />} title="Simone">
         <p className="max-w-sm text-xs">Select a connection to edit it, double-click to connect, or create a new one.</p>
         <Button variant="primary" onClick={() => useConnectionEditor.setState({ editing: 'new' })}>
           New connection

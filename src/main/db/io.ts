@@ -157,7 +157,7 @@ export function runDump(pool: Pool, options: DumpOptions, job: Job): Promise<voi
       await write(
         out,
         [
-          `-- MySQL Client GUI dump`,
+          `-- Simone dump`,
           `-- Database: ${options.database}`,
           `-- Date: ${new Date().toISOString()}`,
           '',

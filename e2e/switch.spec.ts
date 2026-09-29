@@ -16,7 +16,7 @@ async function addConnection(page: Page, name: string, port: string) {
 
 test('switches between connections without disconnecting', async () => {
   const dataDir = mkdtempSync(join(tmpdir(), 'mcg-shot-'))
-  const app = await electron.launch({ args: ['.'], env: { ...process.env, MYSQL_CLIENT_GUI_DATA_DIR: dataDir } })
+  const app = await electron.launch({ args: ['.'], env: { ...process.env, SIMONE_DATA_DIR: dataDir } })
   const page = await app.firstWindow()
   await page.getByRole('button', { name: 'Add workspace' }).click()
   await page.getByRole('button', { name: 'Create new' }).click()

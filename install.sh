@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Installs or updates MySQL Client GUI, with its entry in the applications menu.
+# Installs or updates Simone, with its entry in the applications menu.
 #
 #   ./install.sh                 latest release from GitHub
 #   ./install.sh 1.2.0           a given release
@@ -9,16 +9,18 @@
 #   ./install.sh --uninstall     removes the app (your connections and passwords are kept)
 #
 # Also works without a checkout:
-#   curl -fsSL https://raw.githubusercontent.com/romainlavabre/mysql-client-gui/master/install.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/romainlavabre/simone/master/install.sh | bash
 #
 # Debian / Ubuntu get the .deb package (sudo is asked once): menu entry, icon,
-# `mysql-client-gui` command and the AppArmor profile needed by Ubuntu 24+.
+# `simone` command and the AppArmor profile needed by Ubuntu 24+.
 # Other distributions get the AppImage unpacked in ~/.local/share, with a menu entry, no root needed.
 set -euo pipefail
 
-REPO=romainlavabre/mysql-client-gui
-NAME=mysql-client-gui
-TITLE="MySQL Client GUI"
+REPO=romainlavabre/simone
+NAME=simone
+TITLE="Simone"
+# Name of the app until 1.0.0.
+LEGACY_NAME=mysql-client-gui
 
 APPIMAGE_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/$NAME"
 APP_DIR="$APPIMAGE_DIR/app"
@@ -68,15 +70,29 @@ sudo_cmd() {
 WORK=$(mktemp -d)
 trap 'rm -rf "$WORK"' EXIT
 
+# Removes an AppImage install made under the former name; prints whether there was one.
+remove_legacy_appimage() {
+    local data="${XDG_DATA_HOME:-$HOME/.local/share}"
+    [[ -e "$data/$LEGACY_NAME/app" || -e "$data/applications/$LEGACY_NAME.desktop" ]] || return 1
+    rm -rf "${data:?}/$LEGACY_NAME/app"
+    rmdir "$data/$LEGACY_NAME" 2>/dev/null || true
+    rm -f "$data/applications/$LEGACY_NAME.desktop" "$data/icons/hicolor/512x512/apps/$LEGACY_NAME.png"
+    [[ -L "$HOME/.local/bin/$LEGACY_NAME" ]] && rm -f "$HOME/.local/bin/$LEGACY_NAME"
+    return 0
+}
+
 # ---------------------------------------------------------------- uninstall
 
 if $uninstall; then
     removed=false
-    if command -v dpkg >/dev/null && dpkg -s "$NAME" >/dev/null 2>&1; then
-        info "Removing the $NAME package…"
-        sudo_cmd apt-get remove -y "$NAME"
-        removed=true
-    fi
+    for package_name in "$NAME" "$LEGACY_NAME"; do
+        if command -v dpkg >/dev/null && dpkg -s "$package_name" >/dev/null 2>&1; then
+            info "Removing the $package_name package…"
+            sudo_cmd apt-get remove -y "$package_name"
+            removed=true
+        fi
+    done
+    remove_legacy_appimage && removed=true
     if [[ -e "$APP_DIR" || -e "$DESKTOP_FILE" ]]; then
         info "Removing $APPIMAGE_DIR…"
         rm -rf "$APP_DIR"
@@ -191,6 +207,8 @@ Type=Application
 Categories=Development;Database;
 StartupWMClass=$NAME
 EOF
+
+remove_legacy_appimage && info "Removed the former $LEGACY_NAME install"
 
 if [[ -d "$HOME/.local/bin" ]] && [[ ! -e "$BIN_LINK" || -L "$BIN_LINK" ]]; then
     ln -sf "$APP_DIR/AppRun" "$BIN_LINK"

@@ -127,7 +127,7 @@ run npm run dist
 run git checkout -- package.json package-lock.json
 
 info "Tagging $next…"
-run git tag -a "$next" -m "mysql-client-gui $next"
+run git tag -a "$next" -m "simone $next"
 
 info "Pushing $BRANCH and $next…"
 if ! run git push --atomic "$REMOTE" "$BRANCH" "refs/tags/$next"; then

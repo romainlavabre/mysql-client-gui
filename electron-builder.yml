@@ -1,6 +1,6 @@
-appId: com.romainlavabre.mysql-client-gui
-productName: MySQL Client GUI
-executableName: mysql-client-gui
+appId: com.romainlavabre.simone
+productName: Simone
+executableName: simone
 directories:
   output: dist
   buildResources: build
@@ -23,4 +23,8 @@ deb:
   depends:
     - git
     - openssh-client
+  # The package was called mysql-client-gui until 1.0.0: installing simone removes it.
+  fpm:
+    - --replaces=mysql-client-gui
+    - --conflicts=mysql-client-gui
 artifactName: ${name}-${version}-${arch}.${ext}

@@ -1,6 +1,6 @@
 <img src="build/logo.svg" alt="" width="96" align="right">
 
-# MySQL Client GUI
+# Simone
 
 A fast desktop client for MySQL and MariaDB: the features of phpMyAdmin with an interface in the spirit of Beekeeper Studio.
 Connections and saved queries live in **git repositories** ("workspaces") so a team can share them, and you can switch
@@ -39,14 +39,14 @@ between workspaces — one per client or project — from the sidebar. Passwords
 ## Install
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/romainlavabre/mysql-client-gui/master/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/romainlavabre/simone/master/install.sh | bash
 ```
 
 The script installs the latest release, with its entry and icon in the applications menu:
 
-- **Debian / Ubuntu**: the `.deb` package (asks for `sudo` once). It also adds the `mysql-client-gui` command and the
+- **Debian / Ubuntu**: the `.deb` package (asks for `sudo` once). It also adds the `simone` command and the
   AppArmor profile Ubuntu 24+ needs.
-- **Other distributions**: the AppImage, unpacked in `~/.local/share/mysql-client-gui`, without root and without FUSE.
+- **Other distributions**: the AppImage, unpacked in `~/.local/share/simone`, without root and without FUSE.
 
 Run it again to update. Other uses, from a checkout:
 
@@ -55,16 +55,16 @@ Run it again to update. Other uses, from a checkout:
 ./install.sh --file PATH     # a downloaded .deb or .AppImage
 ./install.sh --from-source   # build the packages here first (needs Node.js)
 ./install.sh --appimage      # the AppImage even on Debian / Ubuntu
-./install.sh --uninstall     # remove the app; connections and passwords stay in ~/.config/mysql-client-gui
+./install.sh --uninstall     # remove the app; connections and passwords stay in ~/.config/simone
 ```
 
 If the repository is private, log in with `gh auth login` first: the script then downloads through `gh`. The packages
-can also be taken by hand from the [releases page](https://github.com/romainlavabre/mysql-client-gui/releases).
+can also be taken by hand from the [releases page](https://github.com/romainlavabre/simone/releases).
 
 ## Workspace repository layout
 
 ```
-mysql-client.json              workspace name and format version
+simone.json                    workspace name and format version (mysql-client.json before 1.1)
 connections/<slug>.json        one file per connection — never any password
 queries/<folder>/<name>.sql    saved queries, with their metadata in leading comments
 ```
@@ -79,9 +79,12 @@ A saved query is a plain SQL file, readable and reviewable in any git tool:
 SELECT DATE_FORMAT(paid_at, '%Y-%m') AS month, SUM(amount) FROM invoices GROUP BY month;
 ```
 
-Local data (never shared) is stored in `~/.config/mysql-client-gui/`: the list of workspaces, the passwords (encrypted with
+Local data (never shared) is stored in `~/.config/simone/`: the list of workspaces, the passwords (encrypted with
 the system keyring through Electron `safeStorage`), per-user overrides, the query history, and the clones created by the
 app (`workspaces/`).
+
+Simone was called MySQL Client GUI until 1.0.0. On its first start it moves `~/.config/mysql-client-gui` to
+`~/.config/simone`; passwords must then be typed again once, as the keyring key belongs to the former name.
 
 ## Requirements
 

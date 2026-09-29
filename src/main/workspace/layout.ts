@@ -1,6 +1,6 @@
 // Files of a workspace repository: what is shared between users.
 //
-//   mysql-client.json           workspace metadata
+//   simone.json                 workspace metadata (mysql-client.json in workspaces created before 1.1)
 //   connections/<slug>.json     connection settings (never secrets)
 //   queries/**/<name>.sql       saved queries, metadata in leading `-- @key value` comments
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
@@ -9,7 +9,9 @@ import { randomUUID } from 'node:crypto'
 import { z } from 'zod'
 import type { ConnectionConfig, SavedQuery } from '@shared/types'
 
-export const WORKSPACE_FILE = 'mysql-client.json'
+export const WORKSPACE_FILE = 'simone.json'
+/** Written by the app under its former name; still recognized, never renamed (the repository is shared). */
+export const LEGACY_WORKSPACE_FILE = 'mysql-client.json'
 export const CONNECTIONS_DIR = 'connections'
 export const QUERIES_DIR = 'queries'
 const FORMAT_VERSION = 1
@@ -59,7 +61,7 @@ export function ensureLayout(dir: string, name: string): string[] {
   const created: string[] = []
   mkdirSync(dir, { recursive: true })
   const workspaceFile = join(dir, WORKSPACE_FILE)
-  if (!existsSync(workspaceFile)) {
+  if (!existsSync(workspaceFile) && !existsSync(join(dir, LEGACY_WORKSPACE_FILE))) {
     writeFileSync(workspaceFile, JSON.stringify({ name, formatVersion: FORMAT_VERSION }, null, 2) + '\n')
     created.push(WORKSPACE_FILE)
   }

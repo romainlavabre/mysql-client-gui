@@ -62,8 +62,8 @@ async function identityArgs(repo: SimpleGit): Promise<string[]> {
   const name = (await repo.raw(['config', '--get', 'user.name']).catch(() => '')).trim()
   const email = (await repo.raw(['config', '--get', 'user.email']).catch(() => '')).trim()
   const args: string[] = []
-  if (!name) args.push('-c', 'user.name=MySQL Client GUI')
-  if (!email) args.push('-c', 'user.email=mysql-client-gui@localhost')
+  if (!name) args.push('-c', 'user.name=Simone')
+  if (!email) args.push('-c', 'user.email=simone@localhost')
   return args
 }
 
