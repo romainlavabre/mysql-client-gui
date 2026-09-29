@@ -153,12 +153,13 @@ else
         release=$(curl -fsSL "$api") \
             || die "no release found at $api (private repository? log in with \"gh auth login\" and rerun)"
         extension=${pattern#\*}
-        url=$(printf '%s\n' "$release" | grep -o '"browser_download_url": *"[^"]*'"$extension"'"' | head -n 1 | sed 's/.*"\(https[^"]*\)"/\1/')
+        url=$(printf '%s\n' "$release" | grep -o '"browser_download_url": *"[^"]*'"$extension"'"' | sed 's/.*"\(https[^"]*\)"/\1/' | sort -V | tail -n 1)
         [[ -n "$url" ]] || die "the release has no $kind package"
         curl -fL --progress-bar -o "$WORK/$(basename "$url")" "$url"
     fi
     # shellcheck disable=SC2012
-    package=$(ls "$WORK"/$pattern 2>/dev/null | head -n 1)
+    # The highest version, should a release carry more than one package.
+    package=$(ls "$WORK"/$pattern 2>/dev/null | sort -V | tail -n 1)
     [[ -n "$package" ]] || die "the download produced no $kind package"
 fi
 

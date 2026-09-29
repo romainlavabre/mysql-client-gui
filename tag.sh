@@ -123,6 +123,8 @@ run npm test
 info "Building the packages…"
 # The version comes from the tag: package.json is only updated in the build.
 run npm version --no-git-tag-version --allow-same-version "$next"
+# Packages of earlier builds must not end up in the release.
+run rm -rf dist
 run npm run dist
 run git checkout -- package.json package-lock.json
 
@@ -136,8 +138,8 @@ if ! run git push --atomic "$REMOTE" "$BRANCH" "refs/tags/$next"; then
 fi
 
 info "Creating the GitHub release…"
-run gh release create "$next" --title "$next" --generate-notes dist/*.AppImage dist/*.deb \
-    || die "the tag is pushed but the release failed: rerun \"gh release create $next dist/*.AppImage dist/*.deb\""
+run gh release create "$next" --title "$next" --generate-notes dist/*-"$next"-*.AppImage dist/*-"$next"-*.deb \
+    || die "the tag is pushed but the release failed: rerun \"gh release create $next dist/*-$next-*.AppImage dist/*-$next-*.deb\""
 
 echo
 if $dry_run; then
