@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { explainConnectionError } from '../../src/main/db/session'
+import { bitToNumber, explainConnectionError } from '../../src/main/db/session'
 
 describe('explainConnectionError', () => {
   it('explains self-signed certificates', () => {
@@ -16,5 +16,15 @@ describe('explainConnectionError', () => {
   it('keeps other errors unchanged', () => {
     const error = new Error("Access denied for user 'x'@'y'")
     expect(explainConnectionError(error)).toBe(error)
+  })
+})
+
+describe('bitToNumber', () => {
+  it('reads BIT values as integers', () => {
+    expect(bitToNumber(new Uint8Array([1]))).toBe(1)
+    expect(bitToNumber(new Uint8Array([0]))).toBe(0)
+    expect(bitToNumber(new Uint8Array([1, 0]))).toBe(256)
+    expect(bitToNumber(new Uint8Array([0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff]))).toBe('18446744073709551615')
+    expect(bitToNumber(null)).toBeNull()
   })
 })

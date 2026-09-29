@@ -25,9 +25,18 @@ export interface TabConnection {
 
 type TypeCastField = Parameters<Extract<NonNullable<ConnectionOptions['typeCast']>, (...args: never[]) => unknown>>[0]
 
-/** Keeps values as plain strings/buffers: JSON is shown as text, geometry as bytes. */
+/** BIT(n) bytes as an integer: a number when it fits, a decimal string beyond 2^53. */
+export function bitToNumber(bytes: Uint8Array | null): number | string | null {
+  if (!bytes) return null
+  let value = 0n
+  for (const byte of bytes) value = (value << 8n) | BigInt(byte)
+  return value <= BigInt(Number.MAX_SAFE_INTEGER) ? Number(value) : value.toString()
+}
+
+/** Keeps values plain: JSON as text, BIT as a number, geometry as bytes. */
 function typeCast(field: TypeCastField, next: () => unknown): unknown {
   if (field.type === 'JSON') return field.string('utf8')
+  if (field.type === 'BIT') return bitToNumber(field.buffer())
   if (field.type === 'GEOMETRY') return field.buffer()
   return next()
 }

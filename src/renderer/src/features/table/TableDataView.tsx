@@ -157,7 +157,10 @@ export function TableDataView({ tab, details }: { tab: TableTab; details: TableD
 
   const isCellModified = useCallback((row: number, col: number) => !!pending.edits.get(row)?.has(col), [pending])
 
-  const onEdit = (row: number, col: number, value: CellValue): void => {
+  const onEdit = (row: number, col: number, edited: CellValue): void => {
+    // A BIT column takes a number: the string '1' would be read as the byte 0x31.
+    const isBit = details.columns.find((c) => c.name === columns[col])?.dataType.toLowerCase() === 'bit'
+    const value = isBit && typeof edited === 'string' && /^\s*\d+\s*$/.test(edited) ? Number(edited) : edited
     setPending((current) => {
       const next: Pending = { edits: new Map(current.edits), deleted: new Set(current.deleted), inserted: [...current.inserted] }
       if (row >= baseRows.length) {

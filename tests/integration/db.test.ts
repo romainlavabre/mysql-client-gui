@@ -76,6 +76,7 @@ describe.each(SERVERS)('$name', ({ port }) => {
         balance DECIMAL(10,2) NULL,
         data JSON NULL,
         avatar BLOB NULL,
+        active BIT(1) NOT NULL DEFAULT b'1',
         created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
         UNIQUE KEY uniq_name (name)
       ) ENGINE=InnoDB;
@@ -113,6 +114,20 @@ describe.each(SERVERS)('$name', ({ port }) => {
   })
 
   describe('queries', () => {
+    it('returns BIT columns as numbers and writes them back', async () => {
+      await data.applyRowChanges(session.pool, {
+        sessionId: '',
+        database: DB,
+        table: 'accounts',
+        changes: [{ type: 'update', key: { id: 1 }, values: { active: 0 } }]
+      })
+      const rows = rowsOf(await exec(`SELECT id, active FROM ${DB}.accounts WHERE id IN (1, 2) ORDER BY id`)).rows
+      expect(rows).toEqual([
+        [1, 0],
+        [2, 1]
+      ])
+    })
+
     it('returns typed values as strings, numbers and bytes', async () => {
       const result = rowsOf(await exec(`SELECT id, name, balance, data, avatar, created_at FROM ${DB}.accounts ORDER BY id`))
       expect(result.columns.map((c) => c.name)).toEqual(['id', 'name', 'balance', 'data', 'avatar', 'created_at'])
@@ -338,7 +353,7 @@ describe.each(SERVERS)('$name', ({ port }) => {
           const rows = JSON.parse(readFileSync(file, 'utf8'))
           expect(rows[0]).toMatchObject({ id: 1, name: 'alice', avatar: '0x00ff10' })
         }
-        if (format === 'csv') expect(readFileSync(file, 'utf8').split('\r\n')[0]).toBe('id,name,balance,data,avatar,created_at')
+        if (format === 'csv') expect(readFileSync(file, 'utf8').split('\r\n')[0]).toBe('id,name,balance,data,avatar,active,created_at')
       }
     })
 
