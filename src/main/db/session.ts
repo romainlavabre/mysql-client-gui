@@ -79,11 +79,34 @@ async function describeServer(connection: Connection | Pool): Promise<{ version:
   return { version: String(rows[0].version), user: String(rows[0].user) }
 }
 
+/** Rewrites the cryptic TLS / transport errors into something actionable. */
+export function explainConnectionError(error: unknown): Error {
+  const original = error instanceof Error ? error : new Error(String(error))
+  const message = original.message
+  const code = (original as { code?: string }).code ?? ''
+  let hint: string | null = null
+  if (/self[- ]signed certificate|unable to (get local issuer|verify the first) certificate/i.test(message) || /SELF_SIGNED|UNABLE_TO_VERIFY/.test(code)) {
+    hint =
+      'The server uses a self-signed certificate. Select its CA certificate, or uncheck "Verify the server certificate" ' +
+      '(the connection stays encrypted, only the server identity is not checked).'
+  } else if (/Hostname\/IP does not match|ERR_TLS_CERT_ALTNAME_INVALID/i.test(message + code)) {
+    hint = 'The server certificate was issued for another host name. Connect with the name it was issued for, or uncheck "Verify the server certificate".'
+  } else if (/insecure transport are prohibited|require_secure_transport/i.test(message)) {
+    hint = 'The server only accepts encrypted connections: enable SSL / TLS.'
+  } else if (/does not support secure connection|Server does not support SSL/i.test(message)) {
+    hint = 'The server does not support SSL: disable SSL / TLS for this connection.'
+  }
+  if (!hint) return original
+  return new Error(`${hint}\n\n(${message})`, { cause: original })
+}
+
 /** Connects once and disconnects: the connection form's "Test" button. */
 export async function testConnection(draft: ConnectionDraft, dataDir: string): Promise<{ serverVersion: string }> {
   const { options, tunnel } = await connectionOptions(draft, dataDir)
   try {
-    const connection = await mysql.createConnection(options)
+    const connection = await mysql.createConnection(options).catch((error: unknown) => {
+      throw explainConnectionError(error)
+    })
     try {
       return { serverVersion: (await describeServer(connection)).version }
     } finally {
@@ -123,7 +146,7 @@ export class SessionManager {
     } catch (error) {
       await pool.end().catch(() => undefined)
       tunnel?.close()
-      throw error
+      throw explainConnectionError(error)
     }
   }
 

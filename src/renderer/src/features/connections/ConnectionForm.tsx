@@ -341,6 +341,11 @@ export function ConnectionForm({ connectionId }: { connectionId: string | 'new' 
                 onChange={(rejectUnauthorized) => setSsl({ rejectUnauthorized })}
                 label="Verify the server certificate"
               />
+              {config.ssl.rejectUnauthorized && !config.ssl.caPath && (
+                <p className="mt-1 text-[11px] text-muted">
+                  For a self-signed certificate (the default of a MySQL install), select its CA certificate or uncheck this option.
+                </p>
+              )}
             </div>
           </div>
         </Section>
