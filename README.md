@@ -36,6 +36,31 @@ between workspaces — one per client or project — from the sidebar. Passwords
 - **Server** — process list with kill, global / session variables (editable), status with key metrics, users and
   privileges (create, password, grant, revoke, drop), table maintenance (analyze, check, optimize, repair).
 
+## Install
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/romainlavabre/mysql-client-gui/master/install.sh | bash
+```
+
+The script installs the latest release, with its entry and icon in the applications menu:
+
+- **Debian / Ubuntu**: the `.deb` package (asks for `sudo` once). It also adds the `mysql-client-gui` command and the
+  AppArmor profile Ubuntu 24+ needs.
+- **Other distributions**: the AppImage, unpacked in `~/.local/share/mysql-client-gui`, without root and without FUSE.
+
+Run it again to update. Other uses, from a checkout:
+
+```bash
+./install.sh 1.2.0           # a given version
+./install.sh --file PATH     # a downloaded .deb or .AppImage
+./install.sh --from-source   # build the packages here first (needs Node.js)
+./install.sh --appimage      # the AppImage even on Debian / Ubuntu
+./install.sh --uninstall     # remove the app; connections and passwords stay in ~/.config/mysql-client-gui
+```
+
+If the repository is private, log in with `gh auth login` first: the script then downloads through `gh`. The packages
+can also be taken by hand from the [releases page](https://github.com/romainlavabre/mysql-client-gui/releases).
+
 ## Workspace repository layout
 
 ```
