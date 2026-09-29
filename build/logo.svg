@@ -39,10 +39,12 @@
     <!-- Ears: tan, folding forward at the tips. -->
     <!-- Written out rather than mirrored with <use>, which some SVG viewers do not render. -->
     <!-- Semi-drop ears: they rise from the head, crease, and the tip flops outward. -->
-    <path d="M236 122 C214 96 186 82 158 86 C136 90 118 106 112 128 C108 142 112 156 124 158 C140 160 160 150 180 144 C196 138 214 132 236 122 Z" fill="url(#tan)"/>
-    <path d="M158 86 C136 90 118 106 112 128 C108 142 112 156 124 158 C136 156 146 140 152 124 C156 110 158 98 158 86 Z" fill="#b8733a"/>
-    <path d="M276 122 C298 96 326 82 354 86 C376 90 394 106 400 128 C404 142 400 156 388 158 C372 160 352 150 332 144 C316 138 298 132 276 122 Z" fill="url(#tan)"/>
-    <path d="M354 86 C376 90 394 106 400 128 C404 142 400 156 388 158 C376 156 366 140 360 124 C356 110 354 98 354 86 Z" fill="#b8733a"/>
+    <path d="M242 128 C230 86 200 50 162 42 C148 66 144 102 150 134 C164 150 184 156 198 154 C216 144 232 136 242 128 Z" fill="url(#tan)"/>
+    <path d="M162 42 C130 38 102 58 90 90 C82 114 86 136 100 144 C114 152 132 140 144 122 C156 102 162 74 162 42 Z" fill="#c07a3e"/>
+    <path d="M162 42 C156 76 148 104 136 126" fill="none" stroke="#a4632c" stroke-width="3" stroke-linecap="round" opacity="0.6"/>
+    <path d="M270 128 C282 86 312 50 350 42 C364 66 368 102 362 134 C348 150 328 156 314 154 C296 144 280 136 270 128 Z" fill="url(#tan)"/>
+    <path d="M350 42 C382 38 410 58 422 90 C430 114 426 136 412 144 C398 152 380 140 368 122 C356 102 350 74 350 42 Z" fill="#c07a3e"/>
+    <path d="M350 42 C356 76 364 104 376 126" fill="none" stroke="#a4632c" stroke-width="3" stroke-linecap="round" opacity="0.6"/>
 
     <!-- Head: white with the tan mask, a white blaze down the middle. -->
     <path d="M256 104 C314 104 350 144 353 196 C356 238 336 266 318 288 C303 306 288 318 256 320 C224 318 209 306 194 288 C176 266 156 238 159 196 C162 144 198 104 256 104 Z" fill="url(#fur)"/>
