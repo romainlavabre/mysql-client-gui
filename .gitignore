@@ -1,0 +1,9 @@
+/node_modules/
+/out/
+/dist/
+/test-results/
+/playwright-report/
+/.idea/
+*.log
+/.sandbox/
+*.tsbuildinfo

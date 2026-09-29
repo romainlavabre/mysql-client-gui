@@ -1,0 +1,26 @@
+appId: com.romainlavabre.mysql-client-gui
+productName: MySQL Client GUI
+executableName: mysql-client-gui
+directories:
+  output: dist
+  buildResources: build
+files:
+  - out/**
+  - build/icon.png
+  - package.json
+asarUnpack:
+  - '**/*.node'
+linux:
+  target:
+    - AppImage
+    - deb
+  category: Development
+  syncDesktopName: true
+  icon: build/icon.png
+  maintainer: Romain Lavabre
+  synopsis: Fast MySQL / MariaDB client with git-shared connections and queries
+deb:
+  depends:
+    - git
+    - openssh-client
+artifactName: ${name}-${version}-${arch}.${ext}

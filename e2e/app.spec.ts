@@ -1,0 +1,80 @@
+// End-to-end smoke test of the packaged renderer against the MySQL server of
+// docker-compose.test.yml. Run with: npm run test:e2e
+import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { _electron as electron, expect, test, type ElectronApplication, type Page } from '@playwright/test'
+
+const MYSQL_PORT = process.env.MYSQL_TEST_PORT ?? '33306'
+
+let app: ElectronApplication
+let page: Page
+let dataDir: string
+
+test.beforeAll(async () => {
+  dataDir = mkdtempSync(join(tmpdir(), 'mcg-e2e-'))
+  app = await electron.launch({
+    args: ['.'],
+    env: { ...process.env, MYSQL_CLIENT_GUI_DATA_DIR: dataDir, GIT_AUTHOR_NAME: 'E2E', GIT_AUTHOR_EMAIL: 'e2e@example.com' }
+  })
+  page = await app.firstWindow()
+})
+
+test.afterAll(async () => {
+  await app?.close()
+  rmSync(dataDir, { recursive: true, force: true })
+})
+
+test('creates a workspace and a connection, runs a query and edits a row', async () => {
+  // Workspace.
+  await page.getByRole('button', { name: 'Add workspace' }).click()
+  await page.getByRole('button', { name: 'Create new' }).click()
+  await page.getByPlaceholder('Client A').fill('E2E workspace')
+  await page.getByRole('button', { name: 'Create', exact: true }).click()
+  await expect(page.getByText('E2E workspace').first()).toBeVisible()
+
+  // Connection.
+  await page.getByRole('button', { name: 'New connection' }).first().click()
+  await page.getByPlaceholder('Production — main DB').fill('Local MySQL')
+  const form = page.locator('form')
+  await form.locator('input').nth(3).fill('127.0.0.1') // host
+  await form.locator('input[type=number]').first().fill(MYSQL_PORT)
+  await form.locator('input[type=password]').first().fill('test')
+  await page.getByRole('button', { name: 'Test' }).click()
+  await expect(page.getByText(/^Connected: /)).toBeVisible()
+  await page.getByRole('button', { name: 'Save & connect' }).click()
+  await expect(page.getByLabel('Disconnect')).toBeVisible()
+
+  // The connection is a file of the workspace repository, without the password.
+  const workspaces = join(dataDir, 'workspaces')
+  const repo = join(workspaces, readdirSync(workspaces)[0])
+  const connectionFile = join(repo, 'connections', 'local-mysql.json')
+  expect(existsSync(connectionFile)).toBe(true)
+  expect(readFileSync(connectionFile, 'utf8')).not.toContain('"password"')
+
+  // Query.
+  const editor = page.locator('.cm-content').first()
+  await editor.click()
+  await page.keyboard.type(
+    "CREATE DATABASE IF NOT EXISTS e2e_db; DROP TABLE IF EXISTS e2e_db.items; CREATE TABLE e2e_db.items (id INT PRIMARY KEY, label VARCHAR(20)); INSERT INTO e2e_db.items VALUES (1, 'one'), (2, 'two'); SELECT label FROM e2e_db.items ORDER BY id;"
+  )
+  await page.keyboard.press('Control+Shift+Enter')
+  // DROP asks for a confirmation.
+  await expect(page.getByRole('dialog', { name: 'Confirm' })).toContainText('DROP TABLE IF EXISTS e2e_db.items')
+  await page.getByRole('button', { name: 'Run', exact: true }).click()
+  await expect(page.locator('.ag-cell').filter({ hasText: 'two' })).toBeVisible()
+
+  // Edit a row from the table view.
+  await page.getByRole('button', { name: 'Refresh' }).first().click()
+  const treeItem = (name: string) => page.locator('span.truncate').getByText(name, { exact: true }).first()
+  await treeItem('e2e_db').click()
+  await treeItem('items').click()
+  const cell = page.getByRole('gridcell', { name: 'one', exact: true }).filter({ visible: true })
+  await cell.dblclick()
+  await page.keyboard.press('Control+a')
+  await page.keyboard.type('uno')
+  await page.keyboard.press('Enter')
+  await expect(page.getByText('1 pending')).toBeVisible()
+  await page.getByRole('button', { name: 'Apply', exact: true }).click()
+  await expect(page.getByText(/1 change\(s\) applied/)).toBeVisible()
+})
