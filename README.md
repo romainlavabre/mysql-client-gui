@@ -8,7 +8,8 @@ between workspaces — one per client or project — from the sidebar. Passwords
 
 - **Workspaces** — clone a git repository, open a folder or create a local one; switch from the sidebar. Every change to
   a connection or a saved query is committed and pushed in the background; remote changes are pulled on switch and every
-  5 minutes. Conflicts are resolved file by file ("keep mine" / "keep theirs").
+  5 minutes. Conflicts are resolved file by file ("keep mine" / "keep theirs"). Workspaces always use the `master`
+  branch: a clone whose default branch is `main` is moved to `master`, and `main` is left untouched on the remote.
 - **Connections** — host, port, user, default database, SSL (CA / client certificate), SSH tunnel through the system `ssh`
   (so `~/.ssh/config` aliases, `ProxyJump`, the agent and `known_hosts` all apply), environment tag with a color (production
   in red), read-only mode enforced both by the app and by the server (`SET SESSION TRANSACTION READ ONLY`). A per-user

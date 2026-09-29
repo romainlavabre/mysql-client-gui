@@ -114,6 +114,7 @@ export class WorkspaceManager {
   private async initialize(repo: WorkspaceRepo): Promise<void> {
     await this.enqueue(repo.id, async () => {
       layout.ensureLayout(repo.path, repo.name)
+      await gitOps.ensureBranch(repo.path)
       await gitOps.commit(repo.path, ['.'], 'Initialize workspace')
     })
     this.schedulePush(repo.id, 0)

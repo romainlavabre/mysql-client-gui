@@ -148,6 +148,41 @@ describe('WorkspaceManager', () => {
     expect(git(remote, 'log', '--format=%s', 'master')).toContain('Update workspace')
   })
 
+  it('always works on master, even when the remote default branch is main', async () => {
+    // A remote created on GitHub: default branch main, one commit.
+    const mainRemote = join(root, 'main-remote.git')
+    execFileSync('git', ['init', '--bare', '--initial-branch=main', mainRemote])
+    const seed = join(root, 'seed')
+    execFileSync('git', ['clone', mainRemote, seed])
+    writeFileSync(join(seed, 'README.md'), 'hello\n')
+    git(seed, 'add', '.')
+    git(seed, 'commit', '-m', 'Initial commit')
+    git(seed, 'push', 'origin', 'main')
+
+    const { ws } = manager('alice')
+    const repo = await ws.clone('GitHub', mainRemote)
+    await ws.saveConnection({ config: connection('DB'), secrets: {}, override: {} })
+    await ws.flush()
+    expect(git(repo.path, 'branch', '--show-current').trim()).toBe('master')
+    expect(git(mainRemote, 'log', '--format=%s', 'master')).toContain('Add connection "DB"')
+    // The README of main is kept in master's history, main is untouched.
+    expect(git(mainRemote, 'log', '--format=%s', 'master')).toContain('Initial commit')
+    expect(git(mainRemote, 'log', '--format=%s', 'main').trim()).toBe('Initial commit')
+    expect(git(repo.path, 'rev-parse', '--abbrev-ref', 'master@{upstream}').trim()).toBe('origin/master')
+  })
+
+  it('creates local workspaces on master and clones empty remotes on master', async () => {
+    const { ws } = manager('alice')
+    const local = await ws.create('Local')
+    expect(git(local.path, 'branch', '--show-current').trim()).toBe('master')
+    const empty = join(root, 'empty.git')
+    execFileSync('git', ['init', '--bare', '--initial-branch=main', empty])
+    const cloned = await ws.clone('Empty', empty)
+    await ws.flush()
+    expect(git(cloned.path, 'branch', '--show-current').trim()).toBe('master')
+    expect(git(empty, 'branch', '--list').trim()).toBe('master')
+  })
+
   it('refuses query paths escaping the queries folder', async () => {
     const { ws } = manager('alice')
     await ws.create('Local')

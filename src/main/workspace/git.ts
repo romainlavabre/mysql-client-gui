@@ -6,6 +6,8 @@ import { simpleGit, type SimpleGit } from 'simple-git'
 import type { ConflictChoice } from '@shared/types'
 
 export const REMOTE = 'origin'
+/** Workspaces always live on this branch, whatever the remote's default branch. */
+export const BRANCH = 'master'
 
 export interface GitStatus {
   isGitRepo: boolean
@@ -66,11 +68,41 @@ async function identityArgs(repo: SimpleGit): Promise<string[]> {
 }
 
 export async function init(dir: string): Promise<void> {
-  await git(dir).init()
+  await git(dir).raw(['init', `--initial-branch=${BRANCH}`])
 }
 
 export async function clone(remoteUrl: string, dir: string): Promise<void> {
   await git().clone(remoteUrl, dir)
+  await ensureBranch(dir)
+}
+
+/**
+ * Puts the repository on BRANCH: switches to it when it exists, otherwise
+ * renames the current branch (e.g. `main` from a GitHub default), which
+ * keeps local commits; they are rebased on origin/master at the next sync.
+ */
+export async function ensureBranch(dir: string): Promise<void> {
+  if (!isGitRepo(dir)) return
+  const repo = git(dir)
+  const current = (await repo.raw(['symbolic-ref', '--short', 'HEAD']).catch(() => '')).trim()
+  if (current === BRANCH) return
+  const hasCommits = await repo
+    .raw(['rev-parse', '--verify', '--quiet', 'HEAD'])
+    .then(() => true)
+    .catch(() => false)
+  if (!hasCommits) {
+    // Unborn branch (empty repository): just point HEAD at BRANCH.
+    await repo.raw(['symbolic-ref', 'HEAD', `refs/heads/${BRANCH}`])
+    return
+  }
+  const localExists = (await repo.raw(['branch', '--list', BRANCH])).trim().length > 0
+  if (localExists) {
+    await repo.raw(['checkout', BRANCH])
+    return
+  }
+  await repo.raw(['branch', '-m', BRANCH])
+  // The renamed branch still tracks the old remote branch: drop it, sync sets origin/master.
+  await repo.raw(['branch', '--unset-upstream', BRANCH]).catch(() => undefined)
 }
 
 export async function setRemote(dir: string, remoteUrl: string): Promise<void> {
@@ -132,6 +164,7 @@ export interface SyncOutcome {
  */
 export async function sync(dir: string): Promise<SyncOutcome> {
   const repo = git(dir)
+  await ensureBranch(dir)
   const st = await status(dir)
   if (st.dirty) await commit(dir, ['.'], 'Update workspace')
   if (!st.hasRemote || !st.branch) return { conflicts: [] }
@@ -165,6 +198,7 @@ export async function sync(dir: string): Promise<SyncOutcome> {
 /** Merges the remote branch, resolving each conflicting file with the given side, then pushes. */
 export async function resolveConflicts(dir: string, choices: Record<string, ConflictChoice>): Promise<SyncOutcome> {
   const repo = git(dir)
+  await ensureBranch(dir)
   const st = await status(dir)
   if (!st.branch) throw new Error('No current branch')
   const remoteRef = `${REMOTE}/${st.branch}`
