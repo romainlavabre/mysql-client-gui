@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
-  <!-- Simone: a database whose connections and queries live in git. -->
+  <!-- Simone, resting her chin on a database whose connections and queries live in git. -->
   <defs>
     <linearGradient id="tile" x1="0" y1="0" x2="0" y2="1">
       <stop offset="0" stop-color="#262a34"/>
@@ -14,31 +14,80 @@
       <stop offset="0" stop-color="#ffd98a"/>
       <stop offset="1" stop-color="#f2b448"/>
     </linearGradient>
+    <linearGradient id="fur" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="1" stop-color="#ebe4da"/>
+    </linearGradient>
+    <linearGradient id="tan" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#e3a767"/>
+      <stop offset="1" stop-color="#c9864a"/>
+    </linearGradient>
+    <clipPath id="head">
+      <path id="head-shape" d="M256 104 C314 104 350 144 353 196 C356 238 336 266 318 288 C303 306 288 318 256 320 C224 318 209 306 194 288 C176 266 156 238 159 196 C162 144 198 104 256 104 Z"/>
+    </clipPath>
   </defs>
 
   <rect x="0" y="0" width="512" height="512" rx="114" fill="url(#tile)"/>
   <rect x="1.5" y="1.5" width="509" height="509" rx="112.5" fill="none" stroke="#ffffff" stroke-opacity="0.07" stroke-width="3"/>
 
-  <!-- Database: three slabs, drawn bottom first. -->
-  <g>
-    <path d="M92 318 v44 a132 40 0 0 0 264 0 v-44 a132 40 0 0 1 -264 0 z" fill="url(#body)"/>
-    <path d="M92 240 v44 a132 40 0 0 0 264 0 v-44 a132 40 0 0 1 -264 0 z" fill="url(#body)"/>
-    <path d="M92 162 v44 a132 40 0 0 0 264 0 v-44 a132 40 0 0 1 -264 0 z" fill="url(#body)"/>
-    <ellipse cx="224" cy="162" rx="132" ry="40" fill="url(#top)"/>
+  <g transform="translate(0 -6)">
+    <!-- Database: two slabs and the top Simone rests on. -->
+    <path d="M110 384 v40 a146 38 0 0 0 292 0 v-40 a146 38 0 0 1 -292 0 z" fill="url(#body)"/>
+    <path d="M110 326 v40 a146 38 0 0 0 292 0 v-40 a146 38 0 0 1 -292 0 z" fill="url(#body)"/>
+    <ellipse cx="256" cy="326" rx="146" ry="38" fill="url(#top)"/>
+
+    <!-- Ears: tan, folding forward at the tips. -->
+    <g id="ear">
+      <path d="M214 128 C190 96 146 84 108 98 C112 124 126 150 146 170 C170 160 194 146 214 128 Z" fill="url(#tan)"/>
+      <path d="M108 98 C112 124 126 150 146 170 C140 150 132 128 130 108 Z" fill="#a8672f"/>
+    </g>
+    <use href="#ear" transform="translate(512 0) scale(-1 1)"/>
+
+    <!-- Head: white with the tan mask, a white blaze down the middle. -->
+    <use href="#head-shape" fill="url(#fur)"/>
+    <g clip-path="url(#head)">
+      <path d="M246 96 C236 130 232 170 234 204 C236 226 232 244 222 256 C200 270 170 262 146 244 L146 96 Z" fill="url(#tan)"/>
+      <path d="M266 96 C276 130 280 170 278 204 C276 226 280 244 290 256 C312 270 342 262 366 244 L366 96 Z" fill="url(#tan)"/>
+    </g>
+
+    <!-- Eyes. -->
+    <g>
+      <ellipse cx="216" cy="206" rx="17" ry="16" fill="#7a4520"/>
+      <ellipse cx="296" cy="206" rx="17" ry="16" fill="#7a4520"/>
+      <circle cx="217" cy="207" r="10" fill="#22140b"/>
+      <circle cx="295" cy="207" r="10" fill="#22140b"/>
+      <circle cx="211" cy="200" r="5" fill="#ffffff"/>
+      <circle cx="289" cy="200" r="5" fill="#ffffff"/>
+    </g>
+
+    <!-- Nose and mouth. -->
+    <path d="M230 262 C230 248 282 248 282 262 C282 280 268 292 256 292 C244 292 230 280 230 262 Z" fill="#1c1c1f"/>
+    <ellipse cx="248" cy="256" rx="7" ry="3.5" fill="#ffffff" fill-opacity="0.18"/>
+    <path d="M256 292 v10 M256 302 c-8 6 -18 6 -24 1 M256 302 c8 6 18 6 24 1" fill="none" stroke="#b8ab9b" stroke-width="4" stroke-linecap="round"/>
+
+    <!-- Paws over the edge. -->
+    <g fill="url(#fur)" stroke="#d8cfc2" stroke-width="3">
+      <path d="M150 318 C150 300 196 296 204 312 C210 326 200 344 180 346 C160 348 150 334 150 318 Z"/>
+      <path d="M362 318 C362 300 316 296 308 312 C302 326 312 344 332 346 C352 348 362 334 362 318 Z"/>
+    </g>
+    <g stroke="#cfc4b5" stroke-width="3" stroke-linecap="round">
+      <path d="M168 330 v10 M184 332 v10"/>
+      <path d="M344 330 v10 M328 332 v10"/>
+    </g>
   </g>
 
   <!-- Git branch badge. -->
-  <g transform="translate(366 362) scale(0.9) translate(-378 -378)">
-  <circle cx="378" cy="378" r="98" fill="#15171c"/>
-  <circle cx="378" cy="378" r="84" fill="#20232b" stroke="#f5bd4f" stroke-width="6"/>
-  <g fill="none" stroke="#eef0f4" stroke-width="13" stroke-linecap="round">
-    <path d="M350 330 v96"/>
-    <path d="M406 346 c0 34 -56 30 -56 62"/>
-  </g>
-  <g fill="#20232b" stroke="#eef0f4" stroke-width="10">
-    <circle cx="350" cy="326" r="15"/>
-    <circle cx="350" cy="432" r="15"/>
-    <circle cx="406" cy="340" r="15" fill="#f5bd4f" stroke="#f5bd4f"/>
-  </g>
+  <g transform="translate(404 404) scale(0.62) translate(-378 -378)">
+    <circle cx="378" cy="378" r="98" fill="#15171c"/>
+    <circle cx="378" cy="378" r="84" fill="#20232b" stroke="#f5bd4f" stroke-width="7"/>
+    <g fill="none" stroke="#eef0f4" stroke-width="14" stroke-linecap="round">
+      <path d="M350 330 v96"/>
+      <path d="M406 346 c0 34 -56 30 -56 62"/>
+    </g>
+    <g fill="#20232b" stroke="#eef0f4" stroke-width="11">
+      <circle cx="350" cy="326" r="15"/>
+      <circle cx="350" cy="432" r="15"/>
+      <circle cx="406" cy="340" r="15" fill="#f5bd4f" stroke="#f5bd4f"/>
+    </g>
   </g>
 </svg>
