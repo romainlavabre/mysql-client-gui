@@ -95,6 +95,12 @@ fi
 
 if use_deb; then kind=deb; pattern='*.deb'; else kind=AppImage; pattern='*.AppImage'; fi
 
+# Ask for the sudo password now rather than after a long download or build.
+if [[ $kind == deb || "$file" == *.deb ]] && (( EUID != 0 )) && [[ "$file" != *.AppImage ]]; then
+    command -v sudo >/dev/null || die "sudo not found: run as root, or use --appimage"
+    sudo -v || die "sudo is needed to install the .deb: run this in a terminal, or use --appimage for an install without root"
+fi
+
 if [[ -n "$file" ]]; then
     [[ -f "$file" ]] || die "file not found: $file"
     case "$file" in
