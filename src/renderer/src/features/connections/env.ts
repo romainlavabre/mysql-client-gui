@@ -13,3 +13,14 @@ export const ENV_LABELS: Record<EnvTag, string> = {
   prod: 'Production',
   other: 'Other'
 }
+
+/** Connection colors of Beekeeper Studio (its dark theme brand colors). */
+export const CONNECTION_COLORS: { name: string; value: string }[] = [
+  { name: 'Red', value: '#ff5d59' },
+  { name: 'Orange', value: '#ff8d21' },
+  { name: 'Yellow', value: '#fad83b' },
+  { name: 'Green', value: '#15db95' },
+  { name: 'Blue', value: '#4ad0ff' },
+  { name: 'Purple', value: '#9858ff' },
+  { name: 'Pink', value: '#ff78f7' }
+]

@@ -1,16 +1,16 @@
 // Connection editor shown in the main area when not connected.
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import clsx from 'clsx'
-import { Eye, EyeOff, FolderOpen, Plug, Save } from 'lucide-react'
+import { Check, Eye, EyeOff, FolderOpen, Plug, Save } from 'lucide-react'
 import { useEffect, useState, type ReactNode } from 'react'
 import type { ConnectionDraft, EnvTag } from '@shared/types'
 import { api, errorMessage } from '../../lib/bridge'
 import { toast } from '../../components/feedback'
-import { Button, Checkbox, ErrorBox, Field, IconButton, Input, Select, Spinner } from '../../components/ui'
+import { Button, Checkbox, ErrorBox, Field, IconButton, Input, Select, Spinner, Tooltip } from '../../components/ui'
 import { connect } from '../../store'
 import { useWorkspace } from '../workspace/useWorkspace'
 import { useConnectionEditor } from './ConnectionList'
-import { ENV_COLORS, ENV_LABELS } from './env'
+import { CONNECTION_COLORS, ENV_COLORS, ENV_LABELS } from './env'
 
 const emptyDraft = (): ConnectionDraft => ({
   config: {
@@ -85,6 +85,38 @@ function FileInput({ value, onChange, placeholder }: { value: string; onChange: 
   )
 }
 
+function ColorSwatch({
+  color,
+  label,
+  selected,
+  onSelect,
+  isDefault
+}: {
+  color: string
+  label: string
+  selected: boolean
+  onSelect: () => void
+  isDefault?: boolean
+}) {
+  return (
+    <Tooltip content={label}>
+      <button
+        type="button"
+        aria-label={label}
+        aria-pressed={selected}
+        onClick={onSelect}
+        className={clsx(
+          'flex size-6 items-center justify-center rounded-full transition hover:scale-110',
+          selected && 'ring-2 ring-fg ring-offset-2 ring-offset-panel'
+        )}
+        style={isDefault ? { background: 'transparent', border: `2px dashed ${color}` } : { background: color }}
+      >
+        {selected && <Check className="size-3.5" style={{ color: isDefault ? color : '#1a1a1a' }} />}
+      </button>
+    </Tooltip>
+  )
+}
+
 export function ConnectionForm({ connectionId }: { connectionId: string | 'new' }) {
   const queryClient = useQueryClient()
   const { data: workspace } = useWorkspace()
@@ -109,6 +141,7 @@ export function ConnectionForm({ connectionId }: { connectionId: string | 'new' 
   if (!isNew && isLoading) return <Spinner className="m-auto mt-10" />
 
   const config = draft.config
+  const isCustomColor = !!config.color && !CONNECTION_COLORS.some((c) => c.value === config.color?.toLowerCase())
   const setConfig = (patch: Partial<ConnectionDraft['config']>): void => setDraft((d) => ({ ...d, config: { ...d.config, ...patch } }))
   const setSsh = (patch: Partial<ConnectionDraft['config']['ssh']>): void =>
     setDraft((d) => ({ ...d, config: { ...d.config, ssh: { ...d.config.ssh, ...patch } } }))
@@ -175,26 +208,50 @@ export function ConnectionForm({ connectionId }: { connectionId: string | 'new' 
               ))}
             </Select>
           </Field>
-          <Field label="Color" className="col-span-2" hint="Defaults to the environment color.">
-            <div className="flex items-center gap-2">
-              <input
-                type="color"
-                value={config.color || ENV_COLORS[config.env]}
-                onChange={(e) => setConfig({ color: e.target.value })}
-                className="h-8 w-12 cursor-pointer rounded border border-border bg-transparent"
+          {/* Not a <label>: it would forward clicks to the first swatch. */}
+          <div className="col-span-4 flex flex-col gap-1">
+            <span className="text-xs font-medium text-muted">Color</span>
+            <div className="flex h-8 items-center gap-1.5">
+              <ColorSwatch
+                color={ENV_COLORS[config.env]}
+                label={`Default (${ENV_LABELS[config.env]} color)`}
+                selected={!config.color}
+                onSelect={() => setConfig({ color: undefined })}
+                isDefault
               />
-              {config.color && (
-                <Button size="sm" variant="ghost" type="button" onClick={() => setConfig({ color: undefined })}>
-                  Reset
-                </Button>
-              )}
+              {CONNECTION_COLORS.map((c) => (
+                <ColorSwatch
+                  key={c.name}
+                  color={c.value}
+                  label={c.name}
+                  selected={config.color?.toLowerCase() === c.value}
+                  onSelect={() => setConfig({ color: c.value })}
+                />
+              ))}
+              <Tooltip content="Custom color">
+                <label
+                  className={clsx(
+                    'relative flex size-6 cursor-pointer items-center justify-center overflow-hidden rounded-full border border-border',
+                    isCustomColor && 'ring-2 ring-fg ring-offset-2 ring-offset-panel'
+                  )}
+                  style={{ background: isCustomColor ? config.color : 'conic-gradient(#ff5d59, #fad83b, #15db95, #4ad0ff, #9858ff, #ff78f7, #ff5d59)' }}
+                >
+                  <input
+                    type="color"
+                    value={config.color || ENV_COLORS[config.env]}
+                    onChange={(e) => setConfig({ color: e.target.value })}
+                    className="absolute inset-0 cursor-pointer opacity-0"
+                    aria-label="Custom color"
+                  />
+                </label>
+              </Tooltip>
             </div>
-          </Field>
-          <div className="col-span-4 flex items-end pb-1">
+          </div>
+          <div className="col-span-2 flex items-end pb-1">
             <Checkbox
               checked={config.readOnly}
               onChange={(readOnly) => setConfig({ readOnly })}
-              label="Read-only (refuse any statement that writes)"
+              label="Read-only (no writes)"
             />
           </div>
         </Section>
