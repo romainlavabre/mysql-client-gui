@@ -104,7 +104,7 @@ test('creates a workspace and a connection, runs a query and edits a row', async
   await privileges.getByLabel('Data', { exact: true }).check()
   await expect(privileges.getByLabel(/^FILE/)).toBeChecked()
   await privileges.getByLabel(/^FILE/).uncheck()
-  expect(await privileges.getByLabel('Data', { exact: true }).evaluate((input: HTMLInputElement) => input.indeterminate)).toBe(true)
+  expect(await privileges.getByLabel('Data', { exact: true }).evaluate((input) => (input as unknown as { indeterminate: boolean }).indeterminate)).toBe(true)
   await privileges.getByLabel(/REQUIRE SSL/).check()
   await expect(privileges.locator('pre')).toContainText(`ALTER USER '${user}'@'%' REQUIRE SSL`)
   await page.screenshot({ path: 'test-results/privileges.png' })

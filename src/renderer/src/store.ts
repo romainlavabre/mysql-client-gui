@@ -209,10 +209,23 @@ function emptyQueryTab(database: string | null, index: number, sql = ''): QueryT
   return { id: newTabId(), kind: 'query', title: `Query ${index}`, sql, database, results: [], activeResult: 0, running: false }
 }
 
+/** Database of the group being looked at: the active tab's, the last selected one for server tabs. */
+export function activeDatabase(): string | null {
+  const { tabs, activeTabId, currentDatabase } = useApp.getState()
+  const active = tabs.find((t) => t.id === activeTabId)
+  if (!active || active.kind === 'admin') return currentDatabase
+  return active.database
+}
+
+/**
+ * Opens a query tab in the current database. A saved query already open in
+ * that database is focused; open elsewhere, it gets a new tab here.
+ */
 export function openQueryTab(options: Partial<Pick<QueryTab, 'sql' | 'title' | 'database' | 'savedPath' | 'savedSql'>> = {}): string {
-  const { tabs, currentDatabase } = useApp.getState()
+  const { tabs } = useApp.getState()
+  const database = options.database !== undefined ? options.database : activeDatabase()
   if (options.savedPath) {
-    const existing = tabs.find((t) => t.kind === 'query' && t.savedPath === options.savedPath)
+    const existing = tabs.find((t) => t.kind === 'query' && t.savedPath === options.savedPath && t.database === database)
     if (existing) {
       useApp.setState({ activeTabId: existing.id })
       return existing.id
@@ -220,7 +233,7 @@ export function openQueryTab(options: Partial<Pick<QueryTab, 'sql' | 'title' | '
   }
   const count = tabs.filter((t) => t.kind === 'query').length + 1
   const tab: QueryTab = {
-    ...emptyQueryTab(options.database !== undefined ? options.database : currentDatabase, count, options.sql ?? ''),
+    ...emptyQueryTab(database, count, options.sql ?? ''),
     ...(options.title ? { title: options.title } : {}),
     savedPath: options.savedPath,
     savedSql: options.savedSql
