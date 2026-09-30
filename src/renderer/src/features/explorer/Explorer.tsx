@@ -92,7 +92,8 @@ export function Explorer() {
   const currentDatabase = useApp((s) => s.currentDatabase)
   const queryClient = useQueryClient()
   const sessionId = session.info.sessionId
-  const [filter, setFilter] = useState('')
+  const [databaseFilter, setDatabaseFilter] = useState('')
+  const [objectFilter, setObjectFilter] = useState('')
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set(currentDatabase ? [currentDatabase] : []))
   const [creatingDatabase, setCreatingDatabase] = useState(false)
 
@@ -110,18 +111,17 @@ export function Explorer() {
     })
 
   const visibleDatabases = useMemo(() => {
-    const needle = filter.trim().toLowerCase()
+    const needle = databaseFilter.trim().toLowerCase()
     if (!needle) return databases ?? []
-    // Keep databases whose name matches, or that are expanded (their objects are filtered instead).
-    return (databases ?? []).filter((db) => db.name.toLowerCase().includes(needle) || expanded.has(db.name))
-  }, [databases, filter, expanded])
+    return (databases ?? []).filter((db) => db.name.toLowerCase().includes(needle))
+  }, [databases, databaseFilter])
 
   return (
     <div className="flex h-full flex-col">
       <div className="flex items-center gap-1 p-2">
         <div className="relative flex-1">
           <Search className="pointer-events-none absolute left-2 top-2 size-4 text-muted" />
-          <Input className="pl-7" placeholder="Filter" value={filter} onChange={(e) => setFilter(e.target.value)} />
+          <Input className="pl-7" placeholder="Filter databases" value={databaseFilter} onChange={(e) => setDatabaseFilter(e.target.value)} />
         </div>
         <IconButton label="Create database" onClick={() => setCreatingDatabase(true)} className="size-8">
           <Plus className="size-4" />
@@ -129,6 +129,10 @@ export function Explorer() {
         <IconButton label="Refresh" onClick={() => void invalidateSchema(queryClient)} className="size-8">
           <RefreshCw className="size-4" />
         </IconButton>
+      </div>
+      <div className="relative px-2 pb-2">
+        <Search className="pointer-events-none absolute left-4 top-2 size-4 text-muted" />
+        <Input className="pl-7" placeholder="Filter tables" value={objectFilter} onChange={(e) => setObjectFilter(e.target.value)} />
       </div>
       <div className="min-h-0 flex-1 overflow-auto px-1 pb-2">
         {isLoading && <Spinner className="mx-auto mt-6" />}
@@ -147,7 +151,7 @@ export function Explorer() {
             }}
             expandedGroups={expanded}
             toggleGroup={toggle}
-            filter={filter.trim().toLowerCase()}
+            filter={objectFilter.trim().toLowerCase()}
           />
         ))}
       </div>
