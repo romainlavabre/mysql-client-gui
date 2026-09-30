@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react'
 import type { CellValue } from '@shared/types'
 import { toHex } from '@shared/sql/quote'
 import { looksLikeJson } from '../lib/format'
+import { SqlEditor } from './SqlEditor'
 import { Button, Dialog, SegmentedControl, Textarea } from './ui'
 
 type Mode = 'text' | 'json' | 'hex'
@@ -64,6 +65,11 @@ export function CellViewer({
           <span className="mr-auto self-center text-xs text-muted">
             {value === null ? 'NULL' : isBinary ? `${value.length} bytes` : `${String(value).length} characters`}
           </span>
+          {mode === 'json' && (
+            <Button disabled={!looksLikeJson(text)} onClick={() => setText(JSON.stringify(JSON.parse(text), null, 2))}>
+              Format
+            </Button>
+          )}
           <Button onClick={() => void navigator.clipboard.writeText(text)}>Copy</Button>
           {canEdit && (
             <>
@@ -90,7 +96,17 @@ export function CellViewer({
             ]}
           />
         )}
-        <Textarea className="min-h-0 flex-1 resize-none" value={text} readOnly={!canEdit} onChange={(e) => setText(e.target.value)} />
+        {mode === 'json' ? (
+          <SqlEditor
+            language="json"
+            value={text}
+            onChange={setText}
+            readOnly={!canEdit}
+            className="min-h-0 flex-1 overflow-hidden rounded-md border border-border"
+          />
+        ) : (
+          <Textarea className="min-h-0 flex-1 resize-none" value={text} readOnly={!canEdit} onChange={(e) => setText(e.target.value)} />
+        )}
       </div>
     </Dialog>
   )

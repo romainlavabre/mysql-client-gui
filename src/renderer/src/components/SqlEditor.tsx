@@ -1,6 +1,7 @@
-// CodeMirror 6 SQL editor with MySQL dialect and schema-aware completion.
+// CodeMirror 6 SQL editor with MySQL dialect and schema-aware completion; also highlights JSON.
 import { autocompletion, closeBrackets, closeBracketsKeymap, completionKeymap } from '@codemirror/autocomplete'
 import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirror/commands'
+import { json } from '@codemirror/lang-json'
 import { MySQL, sql } from '@codemirror/lang-sql'
 import { bracketMatching, defaultHighlightStyle, indentOnInput, syntaxHighlighting } from '@codemirror/language'
 import { highlightSelectionMatches, searchKeymap } from '@codemirror/search'
@@ -48,13 +49,22 @@ function themeFor(theme: 'dark' | 'light'): Extension {
   return theme === 'dark' ? [oneDark, darkTweaks] : [lightTheme, syntaxHighlighting(defaultHighlightStyle)]
 }
 
-function sqlLanguage(): Extension {
-  return sql({ dialect: MySQL, upperCaseKeywords: true })
+type Language = 'sql' | 'json'
+
+function languageFor(language: Language, completion: () => CompletionData | null): Extension {
+  if (language === 'json') return json()
+  return [
+    sql({ dialect: MySQL, upperCaseKeywords: true }),
+    // Tables and columns from our schema-aware source, then keywords.
+    autocompletion({ activateOnTyping: true, override: sqlCompletionSources(completion) })
+  ]
 }
 
 interface Props {
   value: string
   onChange?: (value: string) => void
+  /** Highlighting; completion is only offered for SQL. */
+  language?: Language
   /** Tables, columns and databases offered by the completion. */
   completion?: CompletionData | null
   readOnly?: boolean
@@ -65,7 +75,7 @@ interface Props {
 }
 
 export const SqlEditor = forwardRef<SqlEditorHandle, Props>(function SqlEditor(
-  { value, onChange, completion, readOnly = false, placeholder, keys = [], className },
+  { value, onChange, language = 'sql', completion, readOnly = false, placeholder, keys = [], className },
   ref
 ) {
   const host = useRef<HTMLDivElement>(null)
@@ -90,14 +100,12 @@ export const SqlEditor = forwardRef<SqlEditorHandle, Props>(function SqlEditor(
         indentOnInput(),
         bracketMatching(),
         closeBrackets(),
-        // Tables and columns from our schema-aware source, then keywords.
-        autocompletion({ activateOnTyping: true, override: sqlCompletionSources(() => completionRef.current) }),
         highlightActiveLine(),
         highlightSelectionMatches(),
         EditorView.lineWrapping,
         c.keys.of(keymap.of(keys)),
         keymap.of([...closeBracketsKeymap, ...defaultKeymap, ...searchKeymap, ...historyKeymap, ...completionKeymap, indentWithTab]),
-        c.language.of(sqlLanguage()),
+        c.language.of(languageFor(language, () => completionRef.current)),
         c.theme.of(themeFor(theme)),
         c.readOnly.of([EditorState.readOnly.of(readOnly), EditorView.editable.of(!readOnly)]),
         placeholder ? placeholderExtension(placeholder) : [],
@@ -118,6 +126,10 @@ export const SqlEditor = forwardRef<SqlEditorHandle, Props>(function SqlEditor(
   useEffect(() => {
     view.current?.dispatch({ effects: compartments.current.theme.reconfigure(themeFor(theme)) })
   }, [theme])
+
+  useEffect(() => {
+    view.current?.dispatch({ effects: compartments.current.language.reconfigure(languageFor(language, () => completionRef.current)) })
+  }, [language])
 
   useEffect(() => {
     view.current?.dispatch({ effects: compartments.current.keys.reconfigure(keymap.of(keys)) })
