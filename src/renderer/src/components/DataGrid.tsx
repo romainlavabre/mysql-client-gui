@@ -155,16 +155,21 @@ export const DataGrid = forwardRef<DataGridHandle, Props>(function DataGrid(
       const api = gridApi.current
       if (!api) return
       const selected = api.getSelectedRows().sort((a, b) => a.__i - b.__i)
+      const focused = api.getFocusedCell()
+      const focusedRow = focused && focused.column.getColId() !== '__row' ? api.getDisplayedRowAtIndex(focused.rowIndex)?.data : undefined
+      const cell = focused && focusedRow ? cellRaw((focusedRow[colField(Number(focused.column.getColId()))] ?? null) as CellValue) : null
       let text: string
-      if (selected.length > 0) {
+      // A click selects its row: a single selected row still means "copy the clicked cell".
+      if (cell !== null && selected.length <= 1 && !withHeaders) {
+        text = cell
+      } else if (selected.length > 0) {
         const lines = selected.map((row) => columns.map((_, c) => cellRaw(row[colField(c)] ?? null)).join('\t'))
         if (withHeaders) lines.unshift(columns.map((c) => c.name).join('\t'))
         text = lines.join('\n')
+      } else if (cell !== null) {
+        text = cell
       } else {
-        const focused = api.getFocusedCell()
-        if (!focused || focused.column.getColId() === '__row') return
-        const row = api.getDisplayedRowAtIndex(focused.rowIndex)?.data
-        text = cellRaw((row?.[colField(Number(focused.column.getColId()))] ?? null) as CellValue)
+        return
       }
       void navigator.clipboard.writeText(text)
     },
@@ -191,7 +196,7 @@ export const DataGrid = forwardRef<DataGridHandle, Props>(function DataGrid(
     (event: CellKeyDownEvent<GridRow>) => {
       const keyboard = event.event as KeyboardEvent | undefined
       if (!keyboard) return
-      if ((keyboard.ctrlKey || keyboard.metaKey) && keyboard.key === 'c' && !event.api.getEditingCells().length) {
+      if ((keyboard.ctrlKey || keyboard.metaKey) && keyboard.key.toLowerCase() === 'c' && !event.api.getEditingCells().length) {
         copyText(keyboard.shiftKey)
       }
     },
