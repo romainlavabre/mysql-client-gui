@@ -1,7 +1,8 @@
 // Bottom bar: connection, current database, workspace sync.
-import { Database, FolderGit2, Lock } from 'lucide-react'
+import { ArrowUpCircle, Database, FolderGit2, Lock } from 'lucide-react'
 import { useApp } from '../../store'
 import { ENV_COLORS, ENV_LABELS } from '../connections/env'
+import { showUpdateNotice, useUpdateStatus } from '../update/UpdateNotice'
 import { useActiveRepo, useSyncStatus } from '../workspace/useWorkspace'
 
 export function StatusBar() {
@@ -9,6 +10,7 @@ export function StatusBar() {
   const database = useApp((s) => s.currentDatabase)
   const repo = useActiveRepo()
   const status = useSyncStatus(repo?.id)
+  const update = useUpdateStatus()
   const color = session ? session.connection.color || ENV_COLORS[session.connection.env] : undefined
 
   return (
@@ -44,6 +46,12 @@ export function StatusBar() {
           {status?.error && <span className="text-danger">· sync error</span>}
           {status && status.conflicts.length > 0 && <span className="text-warning">· conflicts</span>}
         </span>
+      )}
+      {update?.latest && update.state !== 'idle' && (
+        <button className="flex items-center gap-1 text-accent hover:underline" onClick={showUpdateNotice}>
+          <ArrowUpCircle className="size-3" />
+          {update.state === 'installed' ? 'Restart to update' : `Update ${update.latest}`}
+        </button>
       )}
     </div>
   )

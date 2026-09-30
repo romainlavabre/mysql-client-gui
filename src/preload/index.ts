@@ -11,7 +11,7 @@ const api = Object.fromEntries(
   ])
 ) as unknown as Api
 
-const EVENTS: (keyof ApiEvents)[] = ['workspace:status', 'workspace:changed', 'job:progress']
+const EVENTS: (keyof ApiEvents)[] = ['workspace:status', 'workspace:changed', 'job:progress', 'update:status']
 
 const bridge: Bridge = {
   api,

@@ -1,6 +1,6 @@
 // Implementation of the IPC API on top of the main process services.
 import { statSync } from 'node:fs'
-import { app, dialog, type BrowserWindow } from 'electron'
+import { app, clipboard, dialog, type BrowserWindow } from 'electron'
 import type { Api } from '@shared/api'
 import { splitStatements } from '@shared/sql/split'
 import { detailsToDefinition } from '@shared/sql/ddl'
@@ -13,6 +13,7 @@ import * as schema from '../db/schema'
 import * as data from '../db/data'
 import * as admin from '../db/admin'
 import * as io from '../db/io'
+import { updateCommand, type Updater } from '../update'
 
 export interface HandlerContext {
   dataDir: string
@@ -20,6 +21,7 @@ export interface HandlerContext {
   sessions: SessionManager
   history: HistoryStore
   jobs: io.JobRunner
+  updater: Updater
   window: () => BrowserWindow | null
   secretsEncrypted: () => boolean
   secretsBackend: () => string
@@ -230,6 +232,21 @@ export function createHandlers(ctx: HandlerContext): Api {
         secretsEncrypted: ctx.secretsEncrypted(),
         secretsBackend: ctx.secretsBackend()
       })
+    },
+
+    update: {
+      status: async () => ctx.updater.getStatus(),
+      install: () => ctx.updater.install(),
+      openTerminal: async () => {
+        const command = updateCommand(ctx.updater.getStatus().kind)
+        if (await ctx.updater.openTerminal()) return { command, copied: false }
+        clipboard.writeText(command)
+        return { command, copied: true }
+      },
+      restart: async () => {
+        app.relaunch({ execPath: ctx.updater.relaunchPath(), args: process.argv.slice(1) })
+        app.quit()
+      }
     }
   }
 }

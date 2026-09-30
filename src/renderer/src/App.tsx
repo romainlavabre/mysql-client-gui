@@ -10,6 +10,7 @@ import { StatusBar } from './features/layout/StatusBar'
 import { Sidebar } from './features/layout/Sidebar'
 import { MainArea } from './features/layout/MainArea'
 import { JobsPanel } from './features/io/JobsPanel'
+import { UpdateNotice } from './features/update/UpdateNotice'
 import { useWorkspaceStatus } from './features/workspace/useWorkspace'
 
 export function App() {
@@ -54,6 +55,7 @@ export function App() {
         <StatusBar />
       </div>
       <JobsPanel />
+      <UpdateNotice />
       <Toaster />
       <DialogHost />
     </RadixTooltip.Provider>

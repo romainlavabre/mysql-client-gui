@@ -10,6 +10,7 @@ import { HistoryStore } from './history'
 import { JobRunner } from './db/io'
 import { createHandlers } from './ipc/handlers'
 import { schemas } from './ipc/schemas'
+import { Updater } from './update'
 
 // Keeps the data folder name stable (~/.config/simone) whatever the product name.
 app.setName('simone')
@@ -110,6 +111,12 @@ void app.whenReady().then(() => {
   const sessions = new SessionManager(dataDir)
   const history = new HistoryStore(join(dataDir, 'history.json'))
   const jobs = new JobRunner((progress) => send('job:progress', progress))
+  const updater = new Updater({
+    version: app.getVersion(),
+    enabled: app.isPackaged && app.getVersion() !== '0.0.0',
+    installScript: join(process.resourcesPath, 'install.sh'),
+    emit: (status) => send('update:status', status)
+  })
 
   registerIpc(
     createHandlers({
@@ -118,12 +125,14 @@ void app.whenReady().then(() => {
       sessions,
       history,
       jobs,
+      updater,
       window: () => mainWindow,
       secretsEncrypted,
       secretsBackend: () => (process.platform === 'linux' ? safeStorage.getSelectedStorageBackend() : 'os')
     })
   )
   createWindow()
+  updater.start()
 
   let quitting = false
   app.on('before-quit', (event) => {

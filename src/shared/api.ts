@@ -30,6 +30,7 @@ import type {
   TableDataResponse,
   TableDefinition,
   TableDetails,
+  UpdateStatus,
   UserAccount,
   VariableInfo,
   WorkspaceRepo,
@@ -142,6 +143,14 @@ export interface Api {
   app: {
     info(): Promise<{ version: string; platform: string; secretsEncrypted: boolean; secretsBackend: string }>
   }
+  update: {
+    status(): Promise<UpdateStatus>
+    /** Downloads and installs the latest version (a system window asks for the password of a .deb). */
+    install(): Promise<void>
+    /** Opens a terminal ready to run install.sh; `copied` when there was none and the command went to the clipboard. */
+    openTerminal(): Promise<{ command: string; copied: boolean }>
+    restart(): Promise<void>
+  }
 }
 
 /** Events pushed from the main process. */
@@ -149,6 +158,7 @@ export interface ApiEvents {
   'workspace:status': SyncStatus
   'workspace:changed': WorkspaceState
   'job:progress': JobProgress
+  'update:status': UpdateStatus
 }
 
 /** Method names per domain, used by the preload script to build the bridge. */
@@ -189,7 +199,8 @@ export const API_METHODS: { [D in keyof Api]: (keyof Api[D])[] } = {
     'maintenance'
   ],
   dialog: ['openFile', 'saveFile', 'openDirectory'],
-  app: ['info']
+  app: ['info'],
+  update: ['status', 'install', 'openTerminal', 'restart']
 }
 
 export interface Bridge {

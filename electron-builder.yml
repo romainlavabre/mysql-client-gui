@@ -8,6 +8,9 @@ files:
   - out/**
   - build/icon.png
   - package.json
+# Run by the app to install an update of its AppImage.
+extraResources:
+  - install.sh
 asarUnpack:
   - '**/*.node'
 linux:

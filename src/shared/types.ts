@@ -523,3 +523,18 @@ export interface PrivilegeSet {
 }
 
 export type MaintenanceOp = 'ANALYZE' | 'OPTIMIZE' | 'CHECK' | 'REPAIR'
+
+// -------------------------------------------------------------------- update
+
+/** How the running app was installed: decides how it can update itself. */
+export type InstallKind = 'deb' | 'appimage' | 'unknown'
+
+export interface UpdateStatus {
+  current: string
+  /** Latest published version when it is newer than the running one. */
+  latest: string | null
+  notesUrl: string | null
+  kind: InstallKind
+  state: 'idle' | 'available' | 'installing' | 'installed' | 'error'
+  error: string | null
+}

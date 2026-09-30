@@ -228,5 +228,11 @@ export const schemas: Schemas = {
   },
   app: {
     info: none
+  },
+  update: {
+    status: none,
+    install: none,
+    openTerminal: none,
+    restart: none
   }
 }
