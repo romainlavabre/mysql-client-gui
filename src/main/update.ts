@@ -15,7 +15,7 @@ const LATEST_RELEASE_URL = `https://api.github.com/repos/${REPO}/releases/latest
 export const INSTALL_SCRIPT_URL = `https://raw.githubusercontent.com/${REPO}/master/install.sh`
 
 const FIRST_CHECK_DELAY = 10_000
-const CHECK_INTERVAL = 6 * 3600_000
+const CHECK_INTERVAL = 30 * 60_000
 
 export interface ReleaseAsset {
   name: string
