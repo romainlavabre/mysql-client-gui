@@ -1,7 +1,7 @@
 // SQL editor tab: editor on top, results below.
 import { useQuery } from '@tanstack/react-query'
 import type { KeyBinding } from '@codemirror/view'
-import { AlignLeft, Bookmark, CircleStop, Database, ListTree, Play, PlaySquare } from 'lucide-react'
+import { AlignLeft, Bookmark, CircleStop, Database, ListTree, Play } from 'lucide-react'
 import { useCallback, useMemo, useRef, useState } from 'react'
 import { Group, Panel, Separator } from 'react-resizable-panels'
 import { format as formatSql } from 'sql-formatter'
@@ -61,13 +61,13 @@ export function QueryTabView({ tab }: { tab: QueryTab }) {
   tabRef.current = tab
 
   const execute = useCallback(
-    async (mode: 'current' | 'all' | 'explain') => {
+    async (mode: 'run' | 'explain') => {
       const current = tabRef.current
       if (current.running) return
       let sql: string
       const selection = editor.current?.selection()
-      if (mode === 'all') sql = current.sql
-      else if (selection) sql = selection
+      if (selection) sql = selection
+      else if (mode === 'run') sql = current.sql
       else sql = statementAt(current.sql, editor.current?.cursor() ?? 0)?.sql ?? ''
       if (!sql.trim()) return
       if (mode === 'explain') {
@@ -141,8 +141,8 @@ export function QueryTabView({ tab }: { tab: QueryTab }) {
 
   const keys = useMemo<KeyBinding[]>(
     () => [
-      { key: 'Mod-Enter', run: () => (void execute('current'), true) },
-      { key: 'Mod-Shift-Enter', run: () => (void execute('all'), true) },
+      { key: 'Mod-Enter', run: () => (void execute('run'), true) },
+      { key: 'Mod-Shift-Enter', run: () => (void execute('run'), true) },
       { key: 'Mod-s', run: () => (void save(), true), preventDefault: true },
       { key: 'Mod-Shift-f', run: () => (format(), true) }
     ],
@@ -158,15 +158,12 @@ export function QueryTabView({ tab }: { tab: QueryTab }) {
             Cancel
           </Button>
         ) : (
-          <Tooltip content="Run the statement under the cursor or the selection (Ctrl+Enter)">
-            <Button size="sm" variant="primary" icon={<Play className="size-3.5" />} onClick={() => void execute('current')}>
+          <Tooltip content="Run all statements, or the selection (Ctrl+Enter)">
+            <Button size="sm" variant="primary" icon={<Play className="size-3.5" />} onClick={() => void execute('run')}>
               Run
             </Button>
           </Tooltip>
         )}
-        <IconButton label="Run all (Ctrl+Shift+Enter)" onClick={() => void execute('all')} disabled={tab.running}>
-          <PlaySquare className="size-4" />
-        </IconButton>
         <IconButton label="Explain the current statement" onClick={() => void execute('explain')} disabled={tab.running}>
           <ListTree className="size-4" />
         </IconButton>

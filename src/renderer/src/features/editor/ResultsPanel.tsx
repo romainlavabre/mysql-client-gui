@@ -39,10 +39,8 @@ export function ResultsPanel({
     return (
       <EmptyState title="No results yet">
         <p className="text-xs">
-          <kbd className="rounded border border-border px-1">Ctrl</kbd>+<kbd className="rounded border border-border px-1">Enter</kbd> runs the
-          statement under the cursor (or the selection),{' '}
-          <kbd className="rounded border border-border px-1">Ctrl</kbd>+<kbd className="rounded border border-border px-1">Shift</kbd>+
-          <kbd className="rounded border border-border px-1">Enter</kbd> runs everything.
+          <kbd className="rounded border border-border px-1">Ctrl</kbd>+<kbd className="rounded border border-border px-1">Enter</kbd> runs every
+          statement (or the selection).
         </p>
       </EmptyState>
     )
